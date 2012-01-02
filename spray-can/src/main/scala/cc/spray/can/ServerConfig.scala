@@ -16,7 +16,7 @@
 
 package cc.spray.can
 
-import akka.config.Config._
+import com.typesafe.config._
 import java.net.InetSocketAddress
 import akka.actor.Actor
 

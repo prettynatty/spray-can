@@ -17,33 +17,33 @@
 package cc.spray.can
 
 import akka.actor.Actor
-import akka.dispatch.CompletableFuture
+import akka.dispatch.Promise
 
 /**
  * A new instance of the `DefaultReceiverActor` is used as the receiver actor for `send` calls on an
  * [[cc.spray.can.HttpConnection]], that return a `Future[HttpResponse].
  */
-class DefaultReceiverActor(future: CompletableFuture[HttpResponse], maxContentLength: Int) extends Actor {
+class DefaultReceiverActor(future: Promise[HttpResponse], maxContentLength: Int) extends Actor {
   var body: Array[Byte] = _
 
   protected def receive = receiveResponse orElse receiveError
 
   protected def receiveResponse: Receive = {
     case x: HttpResponse =>
-      future.completeWithResult(x)
-      self.stop()
-    case start: ChunkedResponseStart => become(receiveChunkedResponse(start) orElse receiveError)
+      future.success(x)
+      context.stop(self)
+    case start: ChunkedResponseStart => context.become(receiveChunkedResponse(start) orElse receiveError)
   }
 
   protected def receiveChunkedResponse(start: ChunkedResponseStart): Receive = {
     case x: MessageChunk => body match {
       case null => body = x.body
       case _ if body.length + x.body.length <= maxContentLength => body = body concat x.body
-      case _ => future.completeWithException(new HttpClientException("Response entity greater than configured " +
+      case _ => future.failure(new HttpClientException("Response entity greater than configured " +
               "limit of " + maxContentLength + " bytes"))
     }
     case x: ChunkedResponseEnd =>
-      future.completeWithResult {
+      future.success {
         HttpResponse(
           status = start.status,
           headers = start.headers,
@@ -51,12 +51,12 @@ class DefaultReceiverActor(future: CompletableFuture[HttpResponse], maxContentLe
           protocol = HttpProtocols.`HTTP/1.1`
         )
       }
-      self.stop()
+      context.stop(self)
   }
 
   protected def receiveError: Receive = {
     case x: HttpClientException =>
-      future.completeWithException(x)
-      self.stop()
+      future.failure(x)
+      context.stop(self)
   }
 }

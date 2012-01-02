@@ -24,6 +24,7 @@ import org.slf4j.LoggerFactory
 import java.io.IOException
 import java.nio.channels.{SocketChannel, SelectionKey}
 import annotation.tailrec
+import akka.util.duration._
 
 /////////////////////////////////////////////
 // HttpPeer messages
@@ -87,10 +88,14 @@ private[can] abstract class HttpPeer(threadName: String) extends Actor {
   protected var requestsTimedOut: Long = _
 
   protected val idleTimeoutCycle = if (config.idleTimeout == 0) None else Some {
-    Scheduler.schedule(() => self ! ReapIdleConnections, config.reapingCycle, config.reapingCycle, TimeUnit.MILLISECONDS)
+    context.system.scheduler.schedule(config.reapingCycle milliseconds, config.reapingCycle milliseconds) {
+      () => self ! ReapIdleConnections
+    }
   }
   protected val requestTimeoutCycle = if (config.requestTimeout == 0) None else Some {
-    Scheduler.schedule(() => self ! HandleTimedOutRequests, config.timeoutCycle, config.timeoutCycle, TimeUnit.MILLISECONDS)
+    context.system.scheduler.schedule(config.timeoutCycle milliseconds, config.timeoutCycle milliseconds) {
+      self ! HandleTimedOutRequests
+    }
   }
 
   // we use our own custom single-thread dispatcher, because our thread will, for the most time,
