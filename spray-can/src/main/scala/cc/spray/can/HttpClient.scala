@@ -15,6 +15,7 @@
  */
 
 package cc.spray.can
+import akka.dispatch.DefaultPromise
 
 import org.slf4j.LoggerFactory
 import java.net.InetSocketAddress
@@ -275,12 +276,13 @@ class HttpClient(val config: ClientConfig = ClientConfig.fromAkkaConf) extends H
 
   private class DefaultHttpConnection(conn: ClientConnection) extends HttpConnection with RequestPreparer {
     protected def userAgentHeader = config.userAgentHeader
-
+    protected implicit val executor = context.dispatcher
+    
     def send(request: HttpRequest) = {
       // we "disable" the akka future timeout, since we rely on our own logic
-      val future = Promise[HttpResponse]()
+      val future = new DefaultPromise[HttpResponse]()
       val actor = context.actorOf(Props(new DefaultReceiverActor(future, config.parserConfig.maxContentLength)), name = "spray-can-default-receiver")
-      sendAndReceive(request, actor.start())
+      sendAndReceive(request, actor)
       future
     }
 
@@ -326,7 +328,7 @@ class HttpClient(val config: ClientConfig = ClientConfig.fromAkkaConf) extends H
 
       def close(extensions: List[ChunkExtension], trailer: List[HttpHeader]) = {
         // we "disable" the akka future timeout, since we rely on our own logic
-        val future = new DefaultCompletableFuture[HttpResponse](Long.MaxValue)
+        val future = new DefaultPromise[HttpResponse]
         val actor = Actor.actorOf(new DefaultReceiverActor(future, config.parserConfig.maxContentLength))
         closeAndReceive(actor.start(), None, extensions, trailer)
         future
