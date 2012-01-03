@@ -23,13 +23,12 @@ import java.nio.channels.Selector
  * An ExecutorBasedEventDrivenDispatcher that wakes up a given NIO selector upon arrival of a new message or task.
  */
 private[can] class SelectorWakingDispatcher(threadName: String, var selector: Selector)
-        extends ExecutorBasedEventDrivenDispatcher(
-  _name = threadName,
-  throughput = -1,
-  throughputDeadlineTime = -1,
-  mailboxType = UnboundedMailbox(),
-  config = ThreadBasedDispatcher.oneThread
-) {
+  extends ExecutorBasedEventDrivenDispatcher(
+    _name = threadName,
+    throughput = -1,
+    throughputDeadlineTime = -1,
+    mailboxType = UnboundedMailbox(),
+    config = ThreadBasedDispatcher.oneThread) {
 
   override def dispatch(invocation: MessageInvocation) {
     super.dispatch(invocation)

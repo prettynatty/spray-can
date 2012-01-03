@@ -15,6 +15,7 @@
  */
 
 package cc.spray.can
+import akka.actor.Props
 
 import org.slf4j.LoggerFactory
 import java.nio.channels.{SocketChannel, SelectionKey, ServerSocketChannel}
@@ -25,7 +26,7 @@ import annotation.tailrec
 import akka.actor.{ActorRef, Actor, PoisonPill}
 import HttpProtocols._
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger, AtomicReference}
-import akka.dispatch.{CompletableFuture, DefaultCompletableFuture, Future}
+import akka.dispatch.{Promise, DefaultPromise, Future}
 
 /////////////////////////////////////////////
 // HttpServer messages
@@ -116,7 +117,7 @@ object HttpServer {
     val responseNr: Int,
     val increaseResponseNr: Boolean = true,
     val requestRecord: Option[RequestRecord] = None,
-    val onSent: Option[CompletableFuture[Unit]] = None) {
+    val onSent: Option[Promise[Unit]] = None) {
     var next: Respond = _
     def toList: List[Respond] = this :: (if (next != null) next.toList else Nil)
   }
@@ -236,7 +237,7 @@ class HttpServer(val config: ServerConfig = ServerConfig.fromAkkaConf)
         } else conn.enqueue(respond)
       } else {
         log.warn("Dropping %s due to closed connection".format(if (respond.increaseResponseNr) "response" else "chunk"))
-        respond.onSent.foreach(_.completeWithException(new ClientClosedConnectionException))
+        respond.onSent.foreach(_.failure(new ClientClosedConnectionException))
         requestRecord.foreach { rec =>
           rec.memberOf -= rec // remove from either the openRequests or the openTimeouts list
         }
@@ -307,9 +308,9 @@ class HttpServer(val config: ServerConfig = ServerConfig.fromAkkaConf)
     import requestLine._
     val remoteAddress = conn.key.channel.asInstanceOf[SocketChannel].socket.getInetAddress
     log.debug("Dispatching start of chunked {} request to '{}' to a new stream actor", method, uri)
-    val streamActor = Actor.actorOf(
+    val streamActor = context.actorOf(Props(
       streamActorCreator(ChunkedRequestContext(HttpRequest(method, uri, headers), remoteAddress))
-    ).start()
+    ), name = "stream-actor")
     conn.chunkingContext = ChunkingContext(requestLine, headers, connectionHeader, streamActor)
     conn.messageParser = new ChunkParser(config.parserConfig)
   }
@@ -448,12 +449,13 @@ class HttpServer(val config: ServerConfig = ServerConfig.fromAkkaConf)
 
     class DefaultChunkedResponder(closeAfterLastChunk: Boolean, initialChunkSent: Boolean) extends ChunkedResponder {
       private var closed = false
-
+      private implicit val executor = context.dispatcher
+      
       def sendChunk(chunk: MessageChunk) = {
         synchronized {
           if (!closed) {
             log.debug("Enqueueing response chunk")
-            val sentFuture = new DefaultCompletableFuture[Unit](Long.MaxValue)
+            val sentFuture = new DefaultPromise[Unit]
             self ! new Respond(conn,
               buffers = prepareChunk(chunk.extensions, chunk.body),
               closeAfterWrite = false,

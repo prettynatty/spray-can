@@ -22,7 +22,7 @@ import java.util.concurrent.TimeUnit
 import akka.actor._
 import org.slf4j.LoggerFactory
 import java.io.IOException
-import java.nio.channels.{SocketChannel, SelectionKey}
+import java.nio.channels.{ SocketChannel, SelectionKey }
 import annotation.tailrec
 import akka.util.duration._
 
@@ -45,13 +45,11 @@ case class Stats(
   requestsDispatched: Long,
   requestsTimedOut: Long,
   requestsOpen: Int,
-  connectionsOpen: Int
-)
+  connectionsOpen: Int)
 
 private[can] case object Select
 private[can] case object ReapIdleConnections
 private[can] case object HandleTimedOutRequests
-
 
 /////////////////////////////////////////////
 // HttpPeer
@@ -60,7 +58,7 @@ private[can] case object HandleTimedOutRequests
 // as soon as a connection is properly established a Connection instance
 // is created and permanently attached to the connections SelectionKey
 private[can] abstract class Connection[T >: Null <: LinkedList.Element[T]](val key: SelectionKey)
-        extends LinkedList.Element[T] {
+  extends LinkedList.Element[T] {
   var writeBuffers: List[ByteBuffer] = Nil
   var messageParser: MessageParser = _
 
@@ -74,7 +72,7 @@ private[can] abstract class Connection[T >: Null <: LinkedList.Element[T]](val k
 private[can] abstract class HttpPeer(threadName: String) extends Actor {
   private lazy val log = LoggerFactory.getLogger(getClass)
 
-  private[can] type Conn >: Null <: Connection[Conn]
+  private[can]type Conn >: Null <: Connection[Conn]
   private[can] case class RefreshConnection(conn: Conn)
   protected def config: PeerConfig
 
@@ -100,10 +98,10 @@ private[can] abstract class HttpPeer(threadName: String) extends Actor {
 
   // we use our own custom single-thread dispatcher, because our thread will, for the most time,
   // be blocked at selector selection, therefore we need to wake it up upon message or task arrival
-  if (self.isBeingRestarted) {
+  self.dispatcher = new SelectorWakingDispatcher(threadName, selector)
+
+  override def postRestart() {
     self.dispatcher.asInstanceOf[SelectorWakingDispatcher].selector = selector
-  } else {
-    self.dispatcher = new SelectorWakingDispatcher(threadName, selector)
   }
 
   override def preStart() {
@@ -113,7 +111,7 @@ private[can] abstract class HttpPeer(threadName: String) extends Actor {
   }
 
   override def preRestart(reason: Throwable, message: Option[Any]) {
-    log.error(getClass.getSimpleName +" crashed, about to restart...\nmessage: {}\nreason: {}",
+    log.error(getClass.getSimpleName + " crashed, about to restart...\nmessage: {}\nreason: {}",
       message.getOrElse("None"), reason)
     cleanUp()
   }
@@ -194,8 +192,8 @@ private[can] abstract class HttpPeer(threadName: String) extends Actor {
       if (!buffers.isEmpty) {
         channel.write(buffers.head)
         if (buffers.head.remaining == 0) { // if we were able to write the whole buffer
-          writeToChannel(buffers.tail)     // we continue with the next buffer
-        } else buffers                     // otherwise we cannot drop the head and need to continue with it next time
+          writeToChannel(buffers.tail) // we continue with the next buffer
+        } else buffers // otherwise we cannot drop the head and need to continue with it next time
       } else Nil
     }
 
