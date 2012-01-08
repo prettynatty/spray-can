@@ -125,7 +125,7 @@ private[can] abstract class HttpPeer(threadName: String) extends Actor {
     case HandleTimedOutRequests => handleTimedOutRequests()
     case ReapIdleConnections => connections.forAllTimedOut(config.idleTimeout)(reapConnection)
     case RefreshConnection(conn) => connections.refresh(conn)
-    case GetStats => self.reply(stats)
+    case GetStats => sender ! stats
   }
 
   private def select() {
@@ -221,8 +221,8 @@ private[can] abstract class HttpPeer(threadName: String) extends Actor {
 
   protected def cleanUp() {
     log.debug("Cleaning up scheduled tasks and NIO selector")
-    idleTimeoutCycle.foreach(_.cancel(false))
-    requestTimeoutCycle.foreach(_.cancel(false))
+    idleTimeoutCycle.foreach(_.cancel)
+    requestTimeoutCycle.foreach(_.cancel)
     protectIO("Closing selector") {
       selector.close()
     }
