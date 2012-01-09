@@ -80,10 +80,10 @@ trait HttpClientSpecs extends Specification {
       "Cannot send request due to closed connection"
   }
 
-  private def dialog(port: Int = 16242)(implicit system: ActorSystem) =
+  private def dialog(port: Int = 16242) =
     HttpDialog(host = "localhost", port = port, clientActorId = "client-test-client")
 
-  private def start()(implicit system: ActorSystem) {
+  private def start() {
     system.actorOf(Props(new TestService))
     system.actorOf(Props(new HttpServer(ServerConfig(port = 16242, serviceActorId = "client-test-server", requestTimeout = 0))))
     system.actorOf(Props(new HttpClient(ClientConfig(clientActorId = "client-test-client",
