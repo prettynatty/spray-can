@@ -115,7 +115,7 @@ object HttpServer {
     val responseNr: Int,
     val increaseResponseNr: Boolean = true,
     val requestRecord: Option[RequestRecord] = None,
-    val onSent: Option[Promise[Unit]] = None) {
+    val onSent: Option[DefaultPromise[Unit]] = None) {
     var next: Respond = _
     def toList: List[Respond] = this :: (if (next != null) next.toList else Nil)
   }
@@ -307,7 +307,7 @@ class HttpServer(val config: ServerConfig = ServerConfig.fromAkkaConf)
     val remoteAddress = conn.key.channel.asInstanceOf[SocketChannel].socket.getInetAddress
     log.debug("Dispatching start of chunked {} request to '{}' to a new stream actor", method, uri)
     val streamActor = context.actorOf(Props(
-      streamActorCreator(ChunkedRequestContext(HttpRequest(method, uri, headers), remoteAddress))), name = "stream-actor")
+      streamActorCreator(ChunkedRequestContext(HttpRequest(method, uri, headers), remoteAddress))))
     conn.chunkingContext = ChunkingContext(requestLine, headers, connectionHeader, streamActor)
     conn.messageParser = new ChunkParser(config.parserConfig)
   }
