@@ -26,7 +26,7 @@ import annotation.tailrec
 import akka.actor.{ ActorRef, Actor, PoisonPill }
 import HttpProtocols._
 import java.util.concurrent.atomic.{ AtomicBoolean, AtomicInteger, AtomicReference }
-import akka.dispatch.{ Promise, DefaultPromise, Future }
+import akka.dispatch.{ Promise, Future }
 
 /////////////////////////////////////////////
 // HttpServer messages
@@ -115,7 +115,7 @@ object HttpServer {
     val responseNr: Int,
     val increaseResponseNr: Boolean = true,
     val requestRecord: Option[RequestRecord] = None,
-    val onSent: Option[DefaultPromise[Unit]] = None) {
+    val onSent: Option[Promise[Unit]] = None) {
     var next: Respond = _
     def toList: List[Respond] = this :: (if (next != null) next.toList else Nil)
   }
@@ -452,7 +452,7 @@ class HttpServer(val config: ServerConfig = ServerConfig.fromAkkaConf)
         synchronized {
           if (!closed) {
             log.debug("Enqueueing response chunk")
-            val sentFuture = new DefaultPromise[Unit]
+            val sentFuture = Promise[Unit]()
             self ! new Respond(conn,
               buffers = prepareChunk(chunk.extensions, chunk.body),
               closeAfterWrite = false,
