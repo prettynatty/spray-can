@@ -90,7 +90,7 @@ trait HttpDialogComponent {
       make(new DefaultPromise[HttpConnection]()(resultF executor)) { nextConnectionF =>
         // only complete the next connection future once the result is in
         log.debug("Awaiting response")
-        resultF.onComplete(_ => nextConnectionF.complete(Right(connection)))
+        resultF.onComplete(_ => nextConnectionF.success(connection))
       }
     }
 

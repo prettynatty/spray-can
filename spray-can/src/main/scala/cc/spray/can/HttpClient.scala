@@ -15,17 +15,15 @@
  */
 
 package cc.spray.can
-import akka.dispatch.DefaultPromise
-
-import org.slf4j.LoggerFactory
-import java.net.InetSocketAddress
-import java.nio.channels.{ SocketChannel, SelectionKey }
-import java.nio.ByteBuffer
-import collection.mutable.Queue
-import java.lang.IllegalStateException
-import akka.dispatch.Promise
-import akka.actor.{ ActorRef, Actor, Props, UntypedChannel }
 import HttpProtocols._
+import akka.actor.{Actor, ActorContext, ActorRef, Props}
+import akka.dispatch.DefaultPromise
+import java.lang.IllegalStateException
+import java.net.InetSocketAddress
+import java.nio.ByteBuffer
+import java.nio.channels.{SelectionKey, SocketChannel}
+import org.slf4j.LoggerFactory
+import scala.collection.mutable.Queue
 
 /**
  * Message to be send to an [[cc.spray.can.HttpClient]] actor to initiate a new connection to the given host and port.
@@ -50,7 +48,7 @@ object HttpClient extends HttpDialogComponent {
     def deliverPartialResponse(response: AnyRef)
   }
   private[can] class ClientConnection(key: SelectionKey, val host: String, val port: Int,
-    val connectionResponseChannel: Option[UntypedChannel] = None)
+    val connectionResponseActor: Option[ActorRef] = None)
     extends Connection[ClientConnection](key) {
     val pendingResponses = Queue.empty[PendingResponse]
     val requestQueue = Queue.empty[Send]
@@ -124,14 +122,12 @@ class HttpClient(val config: ClientConfig = ClientConfig.fromAkkaConf) extends H
       } else {
         log.debug("Connection request registered")
         val key = socketChannel.register(selector, SelectionKey.OP_CONNECT)
-        new ClientConnection(key, host, port, Some(self.channel))
+        new ClientConnection(key, host, port, Some(sender))
       }
     } match {
       case Right(_: ClientConnection) => // nothing to do
-      case Right(x: HttpConnection) => if (!self.tryReply(x)) log.error("Couldn't reply to Connect message")
-      case Left(error) => self.channel.sendException {
-        new HttpClientException("Could not connect to " + address + ": " + error)
-      }
+      case Right(x: HttpConnection) => sender ! x
+      case Left(error) => sender ! new HttpClientException("Could not connect to " + address + ": " + error)
       case _ => throw new IllegalStateException
     }
   }
@@ -139,7 +135,7 @@ class HttpClient(val config: ClientConfig = ClientConfig.fromAkkaConf) extends H
   protected def handleConnectionEvent(key: SelectionKey) {
     if (key.isConnectable) {
       val conn = key.attachment.asInstanceOf[ClientConnection]
-      conn.connectionResponseChannel.foreach { channel =>
+      conn.connectionResponseActor.foreach { actor =>
         protectIO("Connect", conn) {
           key.channel.asInstanceOf[SocketChannel].finishConnect()
           conn.key.interestOps(SelectionKey.OP_READ)
@@ -147,10 +143,8 @@ class HttpClient(val config: ClientConfig = ClientConfig.fromAkkaConf) extends H
           log.debug("Connected to {}:{}", conn.host, conn.port)
           new DefaultHttpConnection(conn)
         } match {
-          case Right(x) => if (!channel.tryTell(x)) log.error("Couldn't reply to Connect message")
-          case Left(error) => channel.sendException {
-            new HttpClientException("Could not connect to " + conn.host + ':' + conn.port + " due to " + error)
-          }
+          case Right(x) => actor ! x
+          case Left(error) => actor ! new HttpClientException("Could not connect to " + conn.host + ':' + conn.port + " due to " + error)
         }
       }
     } else throw new IllegalStateException
@@ -309,8 +303,8 @@ class HttpClient(val config: ClientConfig = ClientConfig.fromAkkaConf) extends H
 
     private def responder(receiver: ActorRef, context: Option[Any]): AnyRef => Unit = {
       context match {
-        case Some(ctx) => response => if (receiver.isRunning) receiver ! (response, ctx)
-        case None => response => if (receiver.isRunning) receiver ! response
+        case Some(ctx) => response => if (!receiver.isTerminated) receiver ! (response, ctx)
+        case None => response => if (!receiver.isTerminated) receiver ! response
       }
     }
 
@@ -329,8 +323,8 @@ class HttpClient(val config: ClientConfig = ClientConfig.fromAkkaConf) extends H
       def close(extensions: List[ChunkExtension], trailer: List[HttpHeader]) = {
         // we "disable" the akka future timeout, since we rely on our own logic
         val future = new DefaultPromise[HttpResponse]
-        val actor = Actor.actorOf(new DefaultReceiverActor(future, config.parserConfig.maxContentLength))
-        closeAndReceive(actor.start(), None, extensions, trailer)
+        val actor = context.actorOf(Props(new DefaultReceiverActor(future, config.parserConfig.maxContentLength)))
+        closeAndReceive(actor, None, extensions, trailer)
         future
       }
 

@@ -271,7 +271,7 @@ class HttpServer(val config: ServerConfig = ServerConfig.fromAkkaConf)
 
   protected def finishWrite(conn: Conn) {
     if (conn.writeBuffers.isEmpty) {
-      conn.currentRespond.onSent.foreach(_.completeWithResult(()))
+      conn.currentRespond.onSent.foreach(_.success(()))
       if (conn.currentRespond.closeAfterWrite) {
         close(conn)
       } else {
