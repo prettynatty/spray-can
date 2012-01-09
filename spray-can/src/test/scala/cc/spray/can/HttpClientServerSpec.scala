@@ -64,10 +64,10 @@ class HttpClientServerSpec extends Specification with HttpClientSpecs { def is =
       case RequestContext(HttpRequest(_, "/chunked", _, _, _), _, responder) => {
         val latch = new CountDownLatch(1)
         val chunker = responder.startChunkedResponse(HttpResponse(201, List(HttpHeader("Fancy", "cool"))))
-        chunker.sendChunk(MessageChunk("1")).onResult { case () =>
-          chunker.sendChunk(MessageChunk("-2345")).onResult { case () =>
-            chunker.sendChunk(MessageChunk("-6789ABCD")).onResult { case () =>
-              chunker.sendChunk(MessageChunk("-EFGHIJKLMNOPQRSTUVWXYZ")).onResult { case () =>
+        chunker.sendChunk(MessageChunk("1")).onSuccess { case () =>
+          chunker.sendChunk(MessageChunk("-2345")).onSuccess { case () =>
+            chunker.sendChunk(MessageChunk("-6789ABCD")).onSuccess { case () =>
+              chunker.sendChunk(MessageChunk("-EFGHIJKLMNOPQRSTUVWXYZ")).onSuccess { case () =>
                 latch.countDown()
               }
             }
