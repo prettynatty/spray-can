@@ -86,7 +86,7 @@ trait HttpDialogComponent {
      * Delays all subsequent `send` tasks until all previously pending responses have come in.
      */
     def awaitResponse: HttpDialog[A] = appendToConnectionChain { connection =>
-      make(new DefaultPromise[HttpConnection]()(resultF executor)) { nextConnectionF =>
+      make(new DefaultPromise[HttpConnection]) { nextConnectionF =>
         // only complete the next connection future once the result is in
         log.debug("Awaiting response")
         resultF.onComplete(_ => nextConnectionF.success(connection))
@@ -97,7 +97,7 @@ trait HttpDialogComponent {
      * Delays all subsequent `send` tasks by the given time duration.
      */
     def waitIdle(duration: Duration): HttpDialog[A] = appendToConnectionChain { connection =>
-      make(new DefaultPromise[HttpConnection]()(resultF executor)) { nextConnectionF =>
+      make(new DefaultPromise[HttpConnection]) { nextConnectionF =>
         // delay completion of the next connection future by the given time
         log.debug("Waiting {} ms", duration.toMillis)
         system.scheduler.scheduleOnce(duration) { nextConnectionF.success(connection) }
@@ -149,16 +149,13 @@ trait HttpDialogComponent {
   implicit def concat1(value: Unit, responseFuture: Future[HttpResponse]) = responseFuture
   implicit def concat2(value: HttpResponse, responseFuture: Future[HttpResponse]) = responseFuture.map(Seq(value, _))
   implicit def concat3(value: Seq[HttpResponse], responseFuture: Future[HttpResponse]) = responseFuture.map(value :+ _)
-  implicit def concat4(value: Unit, responseFutures: Seq[Future[HttpResponse]]) = {
-    implicit val executor = responseFutures.head.executor
+  implicit def concat4(value: Unit, responseFutures: Seq[Future[HttpResponse]])(implicit system: ActorSystem) = {
     Future.sequence(responseFutures)
   }
-  implicit def concat5(value: HttpResponse, responseFutures: Seq[Future[HttpResponse]]) = {
-    implicit val executor = responseFutures.head.executor
+  implicit def concat5(value: HttpResponse, responseFutures: Seq[Future[HttpResponse]])(implicit system: ActorSystem) = {
     Future.sequence(responseFutures).map(value +: _)
   }
-  implicit def concat6(value: Seq[HttpResponse], responseFutures: Seq[Future[HttpResponse]]) = {
-    implicit val executor = responseFutures.head.executor
+  implicit def concat6(value: Seq[HttpResponse], responseFutures: Seq[Future[HttpResponse]])(implicit system: ActorSystem) = {
     Future.sequence(responseFutures).map(value ++ _)
   }
 }
