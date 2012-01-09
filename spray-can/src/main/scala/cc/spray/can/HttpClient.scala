@@ -16,12 +16,12 @@
 
 package cc.spray.can
 import HttpProtocols._
-import akka.actor.{Actor, ActorContext, ActorRef, Props}
+import akka.actor.{ Actor, ActorContext, ActorRef, Props }
 import akka.dispatch.DefaultPromise
 import java.lang.IllegalStateException
 import java.net.InetSocketAddress
 import java.nio.ByteBuffer
-import java.nio.channels.{SelectionKey, SocketChannel}
+import java.nio.channels.{ SelectionKey, SocketChannel }
 import org.slf4j.LoggerFactory
 import scala.collection.mutable.Queue
 
@@ -271,7 +271,7 @@ class HttpClient(val config: ClientConfig = ClientConfig.fromAkkaConf) extends H
   private class DefaultHttpConnection(conn: ClientConnection) extends HttpConnection with RequestPreparer {
     protected def userAgentHeader = config.userAgentHeader
     protected implicit val executor = context.dispatcher
-    
+
     def send(request: HttpRequest) = {
       // we "disable" the akka future timeout, since we rely on our own logic
       val future = new DefaultPromise[HttpResponse]()

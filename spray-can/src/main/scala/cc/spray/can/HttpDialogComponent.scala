@@ -15,12 +15,11 @@
  */
 
 package cc.spray.can
+import akka.actor.{ActorSystem, Scheduler}
+import akka.dispatch.{DefaultPromise, Future}
 import akka.util
-import akka.util.{ Duration }
-import java.util.concurrent.TimeUnit
+import akka.util.Duration
 import org.slf4j.LoggerFactory
-import akka.actor.{ Actor, Scheduler }
-import akka.dispatch.{ DefaultPromise, Future }
 
 trait HttpDialogComponent {
   private lazy val log = LoggerFactory.getLogger(getClass)
@@ -30,7 +29,7 @@ trait HttpDialogComponent {
    * It provides a fluent API for constructing a "chain" of scheduled tasks that define what to do over the course of
    * the dialog.
    */
-  class HttpDialog[A](connectionF: Future[HttpConnection], resultF: Future[A]) {
+  class HttpDialog[A](connectionF: Future[HttpConnection], resultF: Future[A])(implicit system: ActorSystem) {
 
     /**
      * Chains the sending of the given [[cc.spray.can.HttpRequest]] into the dialog.
@@ -100,9 +99,8 @@ trait HttpDialogComponent {
     def waitIdle(duration: Duration): HttpDialog[A] = appendToConnectionChain { connection =>
       make(new DefaultPromise[HttpConnection]()(resultF executor)) { nextConnectionF =>
         // delay completion of the next connection future by the given time
-        val millis = duration.toMillis
-        log.debug("Waiting {} ms", millis)
-        Scheduler.scheduleOnce(() => nextConnectionF.completeWithResult(connection), millis, TimeUnit.MILLISECONDS)
+        log.debug("Waiting {} ms", duration.toMillis)
+        system.scheduler.scheduleOnce(duration) { nextConnectionF.success(connection) }
 
       }
     }
@@ -141,7 +139,7 @@ trait HttpDialogComponent {
      * Constructs a new `HttpDialog` for a connection to the given host and port.
      */
     def apply(host: String, port: Int = 80,
-      clientActorId: String = ClientConfig.fromAkkaConf.clientActorId): HttpDialog[Unit] = {
+      clientActorId: String = ClientConfig.fromAkkaConf.clientActorId)(implicit system: ActorSystem): HttpDialog[Unit] = {
       implicit val timeout = new util.Timeout(Long.MaxValue)
       val connection = (actor(clientActorId) ? Connect(host, port)).mapTo[HttpConnection]
       new HttpDialog(connection, connection.map(_ => ())) // start out with result type Unit
