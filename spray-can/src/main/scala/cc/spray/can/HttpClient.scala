@@ -269,8 +269,8 @@ class HttpClient(val config: ClientConfig = ClientConfig.fromAkkaConf) extends H
   protected def openRequestCount = openRequests.size
 
   private class DefaultHttpConnection(conn: ClientConnection) extends HttpConnection with RequestPreparer {
+    import context.system
     protected def userAgentHeader = config.userAgentHeader
-    protected implicit val executor = context.dispatcher
 
     def send(request: HttpRequest) = {
       // we "disable" the akka future timeout, since we rely on our own logic
