@@ -452,7 +452,7 @@ class HttpServer(val config: ServerConfig = ServerConfig.fromAkkaConf)
         synchronized {
           if (!closed) {
             log.debug("Enqueueing response chunk")
-            val sentFuture = Promise[Unit]()
+            val sentFuture = Promise[Unit]
             self ! new Respond(conn,
               buffers = prepareChunk(chunk.extensions, chunk.body),
               closeAfterWrite = false,

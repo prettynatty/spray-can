@@ -86,7 +86,7 @@ trait HttpDialogComponent {
      * Delays all subsequent `send` tasks until all previously pending responses have come in.
      */
     def awaitResponse: HttpDialog[A] = appendToConnectionChain { connection =>
-      make(Promise[HttpConnection]()) { nextConnectionF =>
+      make(Promise[HttpConnection]) { nextConnectionF =>
         // only complete the next connection future once the result is in
         log.debug("Awaiting response")
         resultF.onComplete(_ => nextConnectionF.success(connection))
@@ -97,7 +97,7 @@ trait HttpDialogComponent {
      * Delays all subsequent `send` tasks by the given time duration.
      */
     def waitIdle(duration: Duration): HttpDialog[A] = appendToConnectionChain { connection =>
-      make(Promise[HttpConnection]()) { nextConnectionF =>
+      make(Promise[HttpConnection]) { nextConnectionF =>
         // delay completion of the next connection future by the given time
         log.debug("Waiting {} ms", duration.toMillis)
         system.scheduler.scheduleOnce(duration) { nextConnectionF.success(connection) }

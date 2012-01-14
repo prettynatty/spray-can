@@ -57,8 +57,7 @@ private[can] case object HandleTimedOutRequests
 
 // as soon as a connection is properly established a Connection instance
 // is created and permanently attached to the connections SelectionKey
-private[can] abstract class Connection[T >: Null <: LinkedList.Element[T]](val key: SelectionKey)
-  extends LinkedList.Element[T] {
+private[can] abstract class Connection[T >: Null <: LinkedList.Element[T]](val key: SelectionKey) extends LinkedList.Element[T] {
   var writeBuffers: List[ByteBuffer] = Nil
   var messageParser: MessageParser = _
 
