@@ -188,8 +188,8 @@ class HttpServer(val config: ServerConfig = ServerConfig.fromAkkaConf)
     channel.socket.bind(config.endpoint)
     channel.register(selector, SelectionKey.OP_ACCEPT)
   }
-  private lazy val serviceActor = actor(config.serviceActorId)
-  private lazy val timeoutActor = actor(config.timeoutActorId)
+  private lazy val serviceActor = context.actorFor(config.serviceActorId)
+  private lazy val timeoutActor = context.actorFor(config.timeoutActorId)
   private val openRequests = new LinkedList[RequestRecord]
   private val openTimeouts = new LinkedList[RequestRecord]
 

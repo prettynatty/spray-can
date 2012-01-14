@@ -27,12 +27,6 @@ package object can {
     new BufferedReader(new InputStreamReader(getClass.getResourceAsStream("/spray-can.version"))).readLine()
   }
 
-  private[can] def actor(id: String): ActorRef = {
-    val actors = Actor.registry.actorsFor(id)
-    assert(actors.length == 1, actors.length + " actors for id '" + id + "' found, expected exactly one")
-    actors.head
-  }
-
   def isTokenChar(c: Char) = c match {
     case x if 'a' <= x && x <= 'z' => true
     case x if 'A' <= x && x <= 'Z' => true
