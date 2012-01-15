@@ -16,7 +16,9 @@
 
 package cc.spray.can
 import HttpMethods._
-import akka.actor.{Actor, Props, Scheduler}
+import akka.actor.{ Actor, Props, Scheduler }
+import akka.dispatch.Await
+import akka.util
 import akka.util.Duration
 import java.util.concurrent.CountDownLatch
 import org.specs2._
@@ -65,10 +67,14 @@ class HttpClientServerSpec extends Specification with HttpClientSpecs {
       case RequestContext(HttpRequest(_, "/chunked", _, _, _), _, responder) => {
         val latch = new CountDownLatch(1)
         val chunker = responder.startChunkedResponse(HttpResponse(201, List(HttpHeader("Fancy", "cool"))))
-        chunker.sendChunk(MessageChunk("1")).onSuccess { case () =>
-            chunker.sendChunk(MessageChunk("-2345")).onSuccess { case () =>
-                chunker.sendChunk(MessageChunk("-6789ABCD")).onSuccess { case () =>
-                    chunker.sendChunk(MessageChunk("-EFGHIJKLMNOPQRSTUVWXYZ")).onSuccess { case () =>
+        chunker.sendChunk(MessageChunk("1")).onSuccess {
+          case () =>
+            chunker.sendChunk(MessageChunk("-2345")).onSuccess {
+              case () =>
+                chunker.sendChunk(MessageChunk("-6789ABCD")).onSuccess {
+                  case () =>
+                    chunker.sendChunk(MessageChunk("-EFGHIJKLMNOPQRSTUVWXYZ")).onSuccess {
+                      case () =>
                         latch.countDown()
                     }
                 }
@@ -93,95 +99,95 @@ class HttpClientServerSpec extends Specification with HttpClientSpecs {
   }
 
   import HttpClient._
-
+  import Await._
+  
   private def oneRequestDialog = {
-    dialog
-      .send(HttpRequest(uri = "/yeah"))
-      .end
-      .get.bodyAsString mustEqual "GET|/yeah"
+    result(dialog.send(HttpRequest(uri = "/yeah"))
+      .end, timeout.duration)
+      .bodyAsString mustEqual "GET|/yeah"
   }
 
   private def terminatedByCloseDialog = {
-    dialog
+    result(dialog
       .send(HttpRequest(uri = "/terminatedByClose"))
-      .end
-      .get.bodyAsString mustEqual "This body is terminated by closing the connection!"
+      .end, timeout.duration)
+      .bodyAsString mustEqual "This body is terminated by closing the connection!"
   }
 
   private def requestResponse = {
     def respond(res: HttpResponse) = HttpRequest(POST).withBody("(" + res.bodyAsString + ")")
 
-    dialog
+    result(dialog
       .send(HttpRequest(GET, "/abc"))
       .reply(respond)
-      .end
-      .get.bodyAsString mustEqual "POST|/|(GET|/abc)"
+      .end, timeout.duration)
+      .bodyAsString mustEqual "POST|/|(GET|/abc)"
   }
 
   private def nonPipelinedRequestRequest = {
-    dialog
+    result(dialog
       .send(HttpRequest(DELETE, "/abc"))
       .awaitResponse
       .send(HttpRequest(PUT, "/xyz"))
-      .end
-      .get.map(_.bodyAsString).mkString(", ") mustEqual "DELETE|/abc, PUT|/xyz"
+      .end, timeout.duration)
+      .map(_.bodyAsString).mkString(", ") mustEqual "DELETE|/abc, PUT|/xyz"
   }
 
   private def pipelinedRequestRequest = {
-    dialog
+    result(dialog
       .send(HttpRequest(DELETE, "/abc"))
       .send(HttpRequest(PUT, "/xyz"))
-      .end
-      .get.map(_.bodyAsString).mkString(", ") mustEqual "DELETE|/abc, PUT|/xyz"
+      .end, timeout.duration)
+      .map(_.bodyAsString).mkString(", ") mustEqual "DELETE|/abc, PUT|/xyz"
   }
 
   private def responseReorderingDialog = {
-    dialog
+    result(dialog
       .send(HttpRequest(uri = "/delayResponse"))
       .send(HttpRequest(uri = "/getThisAndDelayedResponse"))
-      .end
-      .get.map(_.bodyAsString).mkString(",") mustEqual "delayedResponse,secondResponse"
+      .end, timeout.duration)
+      .map(_.bodyAsString).mkString(",") mustEqual "delayedResponse,secondResponse"
   }
 
   private def multiRequestDialog = {
-    dialog
+    result(dialog
       .send((1 to 9).map(i => HttpRequest(uri = "/multi/" + i)))
-      .end
-      .get.map(_.bodyAsString).mkString(",") mustEqual "1,2,3,4,5,6,7,8,9"
+      .end, timeout.duration)
+      .map(_.bodyAsString).mkString(",") mustEqual "1,2,3,4,5,6,7,8,9"
   }
 
   private def pipelinedRequestsWithHead = {
-    dialog
+    result(dialog
       .send(HttpRequest(DELETE, "/abc"))
       .send(HttpRequest(HEAD, "/def"))
       .send(HttpRequest(PUT, "/xyz"))
-      .end
-      .get.map { r =>
+      .end, timeout.duration)
+      .map { r =>
         (r.headers.collect({ case HttpHeader("Content-Length", cl) => cl }).head.toInt, r.bodyAsString)
       } mustEqual Seq((11, "DELETE|/abc"), (9, ""), (8, "PUT|/xyz"))
   }
 
   private def oneRequestChunkedResponse = {
-    dialog
+    result(dialog
       .send(HttpRequest(GET, "/chunked"))
-      .end
-      .get.bodyAsString mustEqual "1-2345-6789ABCD-EFGHIJKLMNOPQRSTUVWXYZ"
+      .end, timeout.duration)
+      .bodyAsString mustEqual "1-2345-6789ABCD-EFGHIJKLMNOPQRSTUVWXYZ"
   }
 
   private def oneRequestChunkedRequest = {
-    dialog
+    result(dialog
       .sendChunked(HttpRequest(GET)) { chunker =>
         chunker.sendChunk(MessageChunk("1"))
         chunker.sendChunk(MessageChunk("2"))
         chunker.sendChunk(MessageChunk("3"))
         chunker.close()
       }
-      .end
-      .get.bodyAsString mustEqual "GET|/|123"
+      .end, timeout.duration)
+      .bodyAsString mustEqual "GET|/|123"
   }
 
   private def pipelinedRequestsWithChunkedRequest = {
-    dialog
+    result(dialog
       .send(HttpRequest(DELETE, "/delete"))
       .sendChunked(HttpRequest(PUT, "/put")) { chunker =>
         chunker.sendChunk(MessageChunk("1"))
@@ -190,32 +196,34 @@ class HttpClientServerSpec extends Specification with HttpClientSpecs {
         chunker.close()
       }
       .send(HttpRequest(GET, "/get"))
-      .end
-      .get.map(_.bodyAsString).mkString(", ") mustEqual "DELETE|/delete, PUT|/put|123, GET|/get"
+      .end, timeout.duration)
+      .map(_.bodyAsString).mkString(", ") mustEqual "DELETE|/delete, PUT|/put|123, GET|/get"
   }
 
   private def pipelinedRequestsWithChunkedResponse = {
-    dialog
+    result(dialog
       .send(HttpRequest(POST, "/"))
       .send(HttpRequest(GET, "/chunked"))
       .send(HttpRequest(PUT, "/xyz"))
-      .end
-      .get.map(_.bodyAsString).mkString(", ") mustEqual "POST|/, 1-2345-6789ABCD-EFGHIJKLMNOPQRSTUVWXYZ, PUT|/xyz"
+      .end, timeout.duration)
+      .map(_.bodyAsString).mkString(", ") mustEqual "POST|/, 1-2345-6789ABCD-EFGHIJKLMNOPQRSTUVWXYZ, PUT|/xyz"
   }
 
   private def timeoutRequest = {
-    dialog
+    result(dialog
       .send(HttpRequest(uri = "/wait200"))
-      .end
-      .get.bodyAsString mustEqual "TIMEOUT"
+      .end, timeout.duration)
+      .bodyAsString mustEqual "TIMEOUT"
   }
 
   private def timeoutConnection = {
-    dialog
+    val f = dialog
       .waitIdle(Duration("500 ms"))
       .send(HttpRequest())
-      .end
-      .await.exception.get.getMessage mustEqual "Cannot send request due to closed connection"
+      .end recover {
+        case e => e.getMessage
+      }
+    result(f, timeout.duration) mustEqual "Cannot send request due to closed connection"
   }
 
   private def dialog = HttpDialog(host = "localhost", port = 17242, clientActorId = "server-test-client")
@@ -231,4 +239,7 @@ class HttpClientServerSpec extends Specification with HttpClientSpecs {
     system.actorOf(Props(new HttpClient(ClientConfig(clientActorId = "server-test-client", requestTimeout = 1000))))
   }
 }
+
+
+
 

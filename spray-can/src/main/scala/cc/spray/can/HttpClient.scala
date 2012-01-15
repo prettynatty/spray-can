@@ -48,8 +48,7 @@ object HttpClient extends HttpDialogComponent {
     def deliverPartialResponse(response: AnyRef)
   }
   private[can] class ClientConnection(key: SelectionKey, val host: String, val port: Int,
-    val connectionResponseActor: Option[ActorRef] = None)
-    extends Connection[ClientConnection](key) {
+    val connectionResponseActor: Option[ActorRef] = None) extends Connection[ClientConnection](key) {
     val pendingResponses = Queue.empty[PendingResponse]
     val requestQueue = Queue.empty[Send]
     var currentCommitMark: Option[RequestMark] = None // defined if a chunked request is currently being written

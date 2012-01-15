@@ -18,6 +18,8 @@ package cc.spray.can
 
 import HttpMethods._
 import akka.actor.{Actor, ActorSystem, Props, Scheduler}
+import akka.dispatch.Await
+import akka.util
 import akka.util.Duration
 import org.specs2.Specification
 import org.specs2.specification._
@@ -48,35 +50,46 @@ trait HttpClientSpecs extends Specification {
   }
 
   import HttpClient._
-
+  import Await._
+  implicit val timeout = new util.Timeout(Long.MaxValue)
+  
   private def oneRequest = {
-    dialog()
+    result(dialog()
       .send(HttpRequest(GET, "/yeah"))
-      .end
-      .get.bodyAsString mustEqual "GET|/yeah"
+      .end, timeout.duration)
+      .bodyAsString mustEqual "GET|/yeah"
   }
 
   private def illegalConnect = {
-    dialog(16243)
+    val f = dialog(16243)
       .send(HttpRequest(GET, "/"))
       .end
-      .await.exception.get.toString mustEqual "cc.spray.can.HttpClientException: " +
+    f recover {
+      case e => e.toString
+    }
+    result(f, timeout.duration) mustEqual "cc.spray.can.HttpClientException: " +
       "Could not connect to localhost:16243 due to java.net.ConnectException: Connection refused"
   }
 
   private def timeoutRequest = {
-    dialog()
+    val f = dialog()
       .send(HttpRequest(GET, "/wait500"))
       .end
-      .await.exception.get.toString mustEqual "cc.spray.can.HttpClientException: Request timed out"
+    f recover {
+      case e => e.toString
+    }
+    result(f, timeout.duration) mustEqual "cc.spray.can.HttpClientException: Request timed out"
   }
 
   private def timeoutConnection = {
-    dialog()
+    val f = dialog()
       .waitIdle(Duration("500 ms"))
       .send(HttpRequest(GET, "/"))
       .end
-      .await.exception.get.toString mustEqual "cc.spray.can.HttpClientException: " +
+    f recover {
+      case e => e.toString
+    }
+    result(f, timeout.duration) mustEqual "cc.spray.can.HttpClientException: " +
       "Cannot send request due to closed connection"
   }
 
