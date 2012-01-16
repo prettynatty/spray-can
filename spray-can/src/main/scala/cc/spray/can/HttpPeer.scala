@@ -15,7 +15,6 @@
  */
 
 package cc.spray.can
-
 import java.nio.ByteBuffer
 import java.nio.channels.spi.SelectorProvider
 import java.util.concurrent.TimeUnit
@@ -101,6 +100,7 @@ private[can] abstract class HttpPeer(threadName: String) extends Actor {
 
   override def postRestart() {
     self.dispatcher.asInstanceOf[SelectorWakingDispatcher].selector = selector
+    preStart()
   }
 
   override def preStart() {
