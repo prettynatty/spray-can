@@ -22,7 +22,6 @@ import java.lang.IllegalStateException
 import java.net.InetSocketAddress
 import java.nio.ByteBuffer
 import java.nio.channels.{ SelectionKey, SocketChannel }
-import org.slf4j.LoggerFactory
 import scala.collection.mutable.Queue
 
 /**
@@ -75,7 +74,6 @@ object HttpClient extends HttpDialogComponent {
 class HttpClient(val config: ClientConfig = ClientConfig.fromAkkaConf) extends HttpPeer("spray-can-client") {
   import HttpClient._
 
-  private lazy val log = LoggerFactory.getLogger(getClass)
   private val openRequests = new LinkedList[RequestRecord]
 
   private[can]type Conn = ClientConnection
@@ -226,7 +224,7 @@ class HttpClient(val config: ClientConfig = ClientConfig.fromAkkaConf) extends H
   }
 
   protected def handleParseError(conn: Conn, parser: ErrorParser) {
-    log.warn("Received illegal response: {}", parser.message)
+    log.warning("Received illegal response: {}", parser.message)
     // In case of a response parsing error we probably stopped reading the response somewhere in between, where we
     // cannot simply resume. Resetting to a known state is not easy either, so we need to close the connection to do so.
     conn.closeAllPendingWithError(parser.message)
@@ -246,7 +244,7 @@ class HttpClient(val config: ClientConfig = ClientConfig.fromAkkaConf) extends H
     openRequests.forAllTimedOut(config.requestTimeout) { requestRecord =>
       import requestRecord._
       if (conn.key.isValid) {
-        log.warn("{} request to '{}' timed out, closing the connection", request.method, request.uri)
+        log.warning("{} request to '{}' timed out, closing the connection", request.method, request.uri)
         conn.closeAllPendingWithError("Request timed out")
         close(conn)
       } // else already closed

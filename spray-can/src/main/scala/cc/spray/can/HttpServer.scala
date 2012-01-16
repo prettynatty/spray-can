@@ -16,8 +16,6 @@
 
 package cc.spray.can
 import akka.actor.Props
-
-import org.slf4j.LoggerFactory
 import java.nio.channels.{ SocketChannel, SelectionKey, ServerSocketChannel }
 import java.io.IOException
 import java.net.InetAddress
@@ -182,7 +180,6 @@ class HttpServer(val config: ServerConfig = ServerConfig.fromAkkaConf)
   extends HttpPeer("spray-can-server") with ResponsePreparer {
   import HttpServer._
 
-  private lazy val log = LoggerFactory.getLogger(getClass)
   private lazy val serverSocketChannel = make(ServerSocketChannel.open) { channel =>
     channel.configureBlocking(false)
     channel.socket.bind(config.endpoint)
@@ -232,7 +229,7 @@ class HttpServer(val config: ServerConfig = ServerConfig.fromAkkaConf)
           prepareWriting(respond)
         } else conn.enqueue(respond)
       } else {
-        log.warn("Dropping %s due to closed connection".format(if (respond.increaseResponseNr) "response" else "chunk"))
+        log.warning("Dropping %s due to closed connection".format(if (respond.increaseResponseNr) "response" else "chunk"))
         respond.onSent.foreach(_.failure(new ClientClosedConnectionException))
         requestRecord.foreach { rec =>
           rec.memberOf -= rec // remove from either the openRequests or the openTimeouts list
@@ -337,7 +334,7 @@ class HttpServer(val config: ServerConfig = ServerConfig.fromAkkaConf)
   }
 
   protected def handleParseError(conn: Conn, parser: ErrorParser) {
-    log.warn("Illegal request, responding with status {} and '{}'", parser.status, parser.message)
+    log.warning("Illegal request, responding with status {} and '{}'", parser.status, parser.message)
     val response = HttpResponse(status = parser.status,
       headers = List(HttpHeader("Content-Type", "text/plain"))).withBody(parser.message)
     // In case of a request parsing error we probably stopped reading the request somewhere in between, where we
@@ -350,7 +347,7 @@ class HttpServer(val config: ServerConfig = ServerConfig.fromAkkaConf)
 
   protected def handleTimedOutRequests() {
     openRequests.forAllTimedOut(config.requestTimeout) { record =>
-      log.warn("A request to '{}' timed out, dispatching to the TimeoutActor '{}'", record.uri, config.timeoutActorName)
+      log.warning("A request to '{}' timed out, dispatching to the TimeoutActor '{}'", record.uri, config.timeoutActorName)
       openRequests -= record
       openTimeouts += record
       import record._
@@ -359,7 +356,7 @@ class HttpServer(val config: ServerConfig = ServerConfig.fromAkkaConf)
     }
     openTimeouts.forAllTimedOut(config.timeoutTimeout) { record =>
       import record._
-      log.warn("The TimeoutService for '{}' timed out as well, responding with the static error reponse", uri)
+      log.warning("The TimeoutService for '{}' timed out as well, responding with the static error reponse", uri)
       record.responder.asInstanceOf[DefaultRequestResponder].timeoutResponder {
         timeoutTimeoutResponse(method, uri, protocol, headers, remoteAddress)
       }
@@ -400,9 +397,9 @@ class HttpServer(val config: ServerConfig = ServerConfig.fromAkkaConf)
     def complete(response: HttpResponse) {
       if (!trySend(response)) mode.get match {
         case COMPLETED =>
-          log.warn("Received an additional response for an already completed request to '{}', ignoring...", requestLine.uri)
+          log.warning("Received an additional response for an already completed request to '{}', ignoring...", requestLine.uri)
         case STREAMING =>
-          log.warn("Received a regular response for a request to '{}', " +
+          log.warning("Received a regular response for a request to '{}', " +
             "that a chunked response has already been started/completed, ignoring...", requestLine.uri)
       }
     }

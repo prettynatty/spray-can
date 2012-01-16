@@ -19,7 +19,6 @@ import java.nio.ByteBuffer
 import java.nio.channels.spi.SelectorProvider
 import java.util.concurrent.TimeUnit
 import akka.actor._
-import org.slf4j.LoggerFactory
 import java.io.IOException
 import java.nio.channels.{ SocketChannel, SelectionKey }
 import annotation.tailrec
@@ -47,6 +46,7 @@ case class Stats(
   connectionsOpen: Int)
 
 private[can] case object Select
+private[can] case object Selected
 private[can] case object ReapIdleConnections
 private[can] case object HandleTimedOutRequests
 
@@ -67,9 +67,7 @@ private[can] abstract class Connection[T >: Null <: LinkedList.Element[T]](val k
   def disableReading() { key.interestOps { interestOps &= ~OP_READ; interestOps } }
 }
 
-private[can] abstract class HttpPeer(threadName: String) extends Actor {
-  private lazy val log = LoggerFactory.getLogger(getClass)
-
+private[can] abstract class HttpPeer(threadName: String) extends Actor with ActorLogging {
   private[can]type Conn >: Null <: Connection[Conn]
   private[can] case class RefreshConnection(conn: Conn)
   protected def config: PeerConfig
@@ -94,14 +92,7 @@ private[can] abstract class HttpPeer(threadName: String) extends Actor {
     }
   }
 
-  // we use our own custom single-thread dispatcher, because our thread will, for the most time,
-  // be blocked at selector selection, therefore we need to wake it up upon message or task arrival
-  self.dispatcher = new SelectorWakingDispatcher(threadName, selector)
-
-  override def postRestart() {
-    self.dispatcher.asInstanceOf[SelectorWakingDispatcher].selector = selector
-    preStart()
-  }
+  val selectorActor = context.actorOf(Props(new SelectorActor(selector)).withDispatcher("pinned-dispatcher"))
 
   override def preStart() {
     // CAUTION: as of Akka 2.0 this method will not be called during a restart
@@ -112,7 +103,8 @@ private[can] abstract class HttpPeer(threadName: String) extends Actor {
   override def preRestart(reason: Throwable, message: Option[Any]) {
     log.error(getClass.getSimpleName + " crashed, about to restart...\nmessage: {}\nreason: {}",
       message.getOrElse("None"), reason)
-    cleanUp()
+    context.children foreach (context.stop(_))
+    postStop()
   }
 
   override def postStop() {
@@ -120,18 +112,15 @@ private[can] abstract class HttpPeer(threadName: String) extends Actor {
   }
 
   protected def receive = {
-    case Select => select()
+    case Select => selectorActor ! Select
+    case Selected => processSelected()
     case HandleTimedOutRequests => handleTimedOutRequests()
     case ReapIdleConnections => connections.forAllTimedOut(config.idleTimeout)(reapConnection)
     case RefreshConnection(conn) => connections.refresh(conn)
     case GetStats => sender ! stats
   }
 
-  private def select() {
-    // The following select() call only really blocks for a longer period of time if the actors mailbox is empty and no
-    // other tasks have been scheduled by the dispatcher. Otherwise the dispatcher will either already have called
-    // selector.wakeup() (which causes the following call to not block at all) or do so in a short while.
-    selector.select()
+  private def processSelected() {
     val selectedKeys = selector.selectedKeys.iterator
     while (selectedKeys.hasNext) {
       val key = selectedKeys.next
@@ -140,7 +129,7 @@ private[can] abstract class HttpPeer(threadName: String) extends Actor {
         if (key.isWritable) write(key) // favor writes if writeable as well as readable
         else if (key.isReadable) read(key)
         else handleConnectionEvent(key)
-      } else log.warn("Invalid selection key: {}", key)
+      } else log.warning("Invalid selection key: {}", key)
     }
     self ! Select // loop
   }
@@ -234,9 +223,9 @@ private[can] abstract class HttpPeer(threadName: String) extends Actor {
       case e: IOException => { // probably the peer forcibly closed the connection
         val error = e.toString
         if (conn != null) {
-          log.warn("{} error: closing connection due to {}", operation, error)
+          log.warning("{} error: closing connection due to {}", operation, error)
           close(conn)
-        } else log.warn("{} error: {}", operation, error)
+        } else log.warning("{} error: {}", operation, error)
         Left(error)
       }
     }
