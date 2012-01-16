@@ -101,12 +101,10 @@ trait PeerConfig {
  */
 case class ServerConfig(
   // ServerConfig
-
   host: String = "localhost",
   port: Int = 8080,
-  serverActorId: String = "spray-can-server",
-  serviceActorId: String = "spray-root-service",
-  timeoutActorId: String = "spray-root-service",
+  serviceActorName: String = "spray-root-service",
+  timeoutActorName: String = "spray-root-service",
   timeoutTimeout: Long = 500,
   serverHeader: String = "spray-can/" + SprayCanVersion,
 
@@ -122,9 +120,8 @@ case class ServerConfig(
   parserConfig: MessageParserConfig = MessageParserConfig()
 ) extends PeerConfig {
 
-  require(!serverActorId.isEmpty, "serverActorId must not be empty")
-  require(!serviceActorId.isEmpty, "serviceActorId must not be empty")
-  require(!timeoutActorId.isEmpty, "timeoutActorId must not be empty")
+  require(!serviceActorName.isEmpty, "serviceActorName must not be empty")
+  require(!timeoutActorName.isEmpty, "timeoutActorName must not be empty")
   require(timeoutTimeout >= 0, "timeoutTimeout must be >= 0 ms")
 
   def endpoint = new InetSocketAddress(host, port)
@@ -132,9 +129,8 @@ case class ServerConfig(
   override def toString =
     "ServerConfig(\n" +
     "  endpoint       : " + endpoint + "\n" +
-    "  serverActorId  : " + serverActorId + "\n" +
-    "  serviceActorId : " + serviceActorId + "\n" +
-    "  timeoutActorId : " + timeoutActorId + "\n" +
+    "  serviceActorId : " + serviceActorName + "\n" +
+    "  timeoutActorId : " + timeoutActorName + "\n" +
     "  timeoutTimeout : " + timeoutTimeout + " ms\n" +
     "  serverHeader   : " + serverHeader + "\n" +
     "  readBufferSize : " + readBufferSize + " bytes\n" +
@@ -169,9 +165,8 @@ object ServerConfig extends ConfigHelper {
     // ServerConfig
     host           = valueFor("spray-can.server.host").getOrElse("localhost"),
     port           = valueFor("spray-can.server.port").getOrElse(8080),
-    serverActorId  = valueFor("spray-can.server.server-actor-id").getOrElse("spray-can-server"),
-    serviceActorId = valueFor("spray-can.server.service-actor-id").getOrElse("spray-root-service"),
-    timeoutActorId = valueFor("spray-can.server.timeout-actor-id").getOrElse("spray-root-service"),
+    serviceActorName = valueFor("spray-can.server.service-actor-id").getOrElse("spray-root-service"),
+    timeoutActorName = valueFor("spray-can.server.timeout-actor-id").getOrElse("spray-root-service"),
     timeoutTimeout = valueFor("spray-can.server.timeout-timeout").getOrElse(500),
     serverHeader   = valueFor("spray-can.server.server-header").getOrElse("spray-can/" + SprayCanVersion),
 
@@ -195,7 +190,6 @@ object ServerConfig extends ConfigHelper {
  */
 case class ClientConfig(
   // ClientConfig
-  clientActorId: String = "spray-can-client",
   userAgentHeader: String = "spray-can/" + SprayCanVersion,
 
   // PeerConfig
@@ -207,11 +201,8 @@ case class ClientConfig(
   parserConfig: MessageParserConfig = MessageParserConfig()
 ) extends PeerConfig {
 
-  require(!clientActorId.isEmpty, "clientActorId must not be empty")
-
   override def toString =
     "ClientConfig(\n" +
-    "  clientActorId  : " + clientActorId + "\n" +
     "  userAgentHeader: " + userAgentHeader + "\n" +
     "  readBufferSize : " + readBufferSize + " bytes\n" +
     "  idleTimeout    : " + idleTimeout + " ms\n" +
@@ -224,7 +215,6 @@ case class ClientConfig(
 object ClientConfig extends ConfigHelper {
   lazy val fromAkkaConf = ClientConfig(
     // ClientConfig
-    clientActorId   = valueFor("spray-can.client.client-actor-id").getOrElse("spray-can-client"),
     userAgentHeader = valueFor("spray-can.client.user-agent-header").getOrElse("spray-can/" + SprayCanVersion),
 
     // PeerConfig

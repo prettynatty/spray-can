@@ -188,8 +188,8 @@ class HttpServer(val config: ServerConfig = ServerConfig.fromAkkaConf)
     channel.socket.bind(config.endpoint)
     channel.register(selector, SelectionKey.OP_ACCEPT)
   }
-  private lazy val serviceActor = context.actorFor(config.serviceActorId)
-  private lazy val timeoutActor = context.actorFor(config.timeoutActorId)
+  private lazy val serviceActor = context.actorFor(config.serviceActorName)
+  private lazy val timeoutActor = context.actorFor(config.timeoutActorName)
   private val openRequests = new LinkedList[RequestRecord]
   private val openTimeouts = new LinkedList[RequestRecord]
 
@@ -199,8 +199,6 @@ class HttpServer(val config: ServerConfig = ServerConfig.fromAkkaConf)
   private lazy val streamActorCreator = config.streamActorCreator.getOrElse {
     BufferingRequestStreamActor.creator(serviceActor, config.parserConfig.maxContentLength)
   }
-
-  self.id = config.serverActorId
 
   override def preStart() {
     log.info("Starting spray-can HTTP server on {}", config.endpoint)
@@ -352,7 +350,7 @@ class HttpServer(val config: ServerConfig = ServerConfig.fromAkkaConf)
 
   protected def handleTimedOutRequests() {
     openRequests.forAllTimedOut(config.requestTimeout) { record =>
-      log.warn("A request to '{}' timed out, dispatching to the TimeoutActor '{}'", record.uri, config.timeoutActorId)
+      log.warn("A request to '{}' timed out, dispatching to the TimeoutActor '{}'", record.uri, config.timeoutActorName)
       openRequests -= record
       openTimeouts += record
       import record._

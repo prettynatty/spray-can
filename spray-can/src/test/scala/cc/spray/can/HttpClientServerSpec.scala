@@ -48,10 +48,9 @@ class HttpClientServerSpec extends Specification with HttpClientSpecs {
       "idle-time-out connection" ! timeoutConnection ^
       p ^
       clientSpecs ^
-      Step(Actor.registry.shutdownAll())
+      Step(system.shutdown)
 
   private class TestService extends Actor {
-    self.id = "server-test-server"
     var delayedResponse: RequestResponder = _
     protected def receive = {
       case RequestContext(HttpRequest(_, "/delayResponse", _, _, _), _, responder) =>
@@ -226,17 +225,17 @@ class HttpClientServerSpec extends Specification with HttpClientSpecs {
     result(f, timeout.duration) mustEqual "Cannot send request due to closed connection"
   }
 
-  private def dialog = HttpDialog(host = "localhost", port = 17242, clientActorId = "server-test-client")
+  private def dialog = HttpDialog(host = "localhost", port = 17242, clientActorName = "server-test-client")
 
   private def start() {
-    system.actorOf(Props(new TestService))
+    system.actorOf(Props(new TestService), name = "server-test-server")
     system.actorOf(Props(new HttpServer(ServerConfig(
       port = 17242,
-      serviceActorId = "server-test-server",
-      timeoutActorId = "server-test-server",
+      serviceActorName = "server-test-server",
+      timeoutActorName = "server-test-server",
       requestTimeout = 100, timeoutCycle = 50,
       idleTimeout = 200, reapingCycle = 100))))
-    system.actorOf(Props(new HttpClient(ClientConfig(clientActorId = "server-test-client", requestTimeout = 1000))))
+    system.actorOf(Props(new HttpClient(ClientConfig(requestTimeout = 1000))), name = "server-test-client")
   }
 }
 

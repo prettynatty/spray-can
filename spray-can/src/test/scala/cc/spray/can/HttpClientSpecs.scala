@@ -39,7 +39,6 @@ trait HttpClientSpecs extends Specification {
       end
 
   private class TestService extends Actor {
-    self.id = "client-test-server"
     protected def receive = {
       case RequestContext(HttpRequest(_, "/wait500", _, _, _), _, responder) => {
         context.system.scheduler.scheduleOnce(Duration.create(500, "millis")) { responder.complete(HttpResponse()) }
@@ -94,12 +93,11 @@ trait HttpClientSpecs extends Specification {
   }
 
   private def dialog(port: Int = 16242) =
-    HttpDialog(host = "localhost", port = port, clientActorId = "client-test-client")
+    HttpDialog(host = "localhost", port = port, clientActorName = "client-test-client")
 
   private def start() {
-    system.actorOf(Props(new TestService))
-    system.actorOf(Props(new HttpServer(ServerConfig(port = 16242, serviceActorId = "client-test-server", requestTimeout = 0))))
-    system.actorOf(Props(new HttpClient(ClientConfig(clientActorId = "client-test-client",
-      requestTimeout = 100, timeoutCycle = 50, idleTimeout = 200, reapingCycle = 100))))
+    system.actorOf(Props(new TestService), name = "client-test-server")
+    system.actorOf(Props(new HttpServer(ServerConfig(port = 16242, serviceActorName = "client-test-server", requestTimeout = 0))))
+    system.actorOf(Props(new HttpClient(ClientConfig(requestTimeout = 100, timeoutCycle = 50, idleTimeout = 200, reapingCycle = 100))), name = "client-test-client")
   }
 }

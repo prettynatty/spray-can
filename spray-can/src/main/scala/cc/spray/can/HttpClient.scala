@@ -80,8 +80,6 @@ class HttpClient(val config: ClientConfig = ClientConfig.fromAkkaConf) extends H
 
   private[can]type Conn = ClientConnection
 
-  self.id = config.clientActorId
-
   override def preStart() {
     log.info("Starting spray-can HTTP client")
     super.preStart()
