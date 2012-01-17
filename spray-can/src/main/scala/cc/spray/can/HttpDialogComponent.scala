@@ -17,13 +17,12 @@
 package cc.spray.can
 import akka.actor.{ActorSystem, Scheduler}
 import akka.dispatch.{Promise, Future}
-import akka.event.Logging
+import org.slf4j.LoggerFactory
 import akka.util
 import akka.util.Duration
 
 trait HttpDialogComponent {
-  // FIXME: system is missing
-  // private lazy val log = Logging(context.system, this)
+  private lazy val log = LoggerFactory.getLogger(getClass)
 
   /**
    * An `HttpDialog` encapsulates an exchange of HTTP messages over the course of one connection.
@@ -67,7 +66,7 @@ trait HttpDialogComponent {
     def sendChunked[B](request: HttpRequest)(chunker: ChunkedRequester => Future[HttpResponse])(implicit concat: (A, Future[HttpResponse]) => Future[B]): HttpDialog[B] = {
       appendToResultChain {
         val responseF = connectionF.flatMap { connection =>
-          // log.debug("Sending chunked request start {}", request)
+          log.debug("Sending chunked request start {}", request)
           chunker(connection.startChunkedRequest(request))
         }
         concat(_, responseF)
@@ -89,7 +88,7 @@ trait HttpDialogComponent {
     def awaitResponse: HttpDialog[A] = appendToConnectionChain { connection =>
       make(Promise[HttpConnection]) { nextConnectionF =>
         // only complete the next connection future once the result is in
-        // log.debug("Awaiting response")
+        log.debug("Awaiting response")
         resultF.onComplete(_ => nextConnectionF.success(connection))
       }
     }
@@ -100,7 +99,7 @@ trait HttpDialogComponent {
     def waitIdle(duration: Duration): HttpDialog[A] = appendToConnectionChain { connection =>
       make(Promise[HttpConnection]) { nextConnectionF =>
         // delay completion of the next connection future by the given time
-        // log.debug("Waiting {} ms", duration.toMillis)
+        log.debug("Waiting {} ms", duration.toMillis)
         system.scheduler.scheduleOnce(duration) { nextConnectionF.success(connection) }
 
       }
@@ -115,7 +114,7 @@ trait HttpDialogComponent {
     def end: Future[A] = resultF.onComplete { _ =>
       connectionF.onComplete {
         case conn: HttpConnection => {
-          // log.debug("Closing connection after HttpDialog completion")
+          log.debug("Closing connection after HttpDialog completion")
           conn.close()
         }
       }
@@ -130,7 +129,7 @@ trait HttpDialogComponent {
     }
 
     private def doSend(request: HttpRequest): Future[HttpResponse] = connectionF.flatMap { connection =>
-      // log.debug("Sending request {}", request)
+      log.debug("Sending request {}", request)
       connection.send(request)
     }
   }
