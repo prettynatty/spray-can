@@ -15,17 +15,16 @@
  */
 
 package cc.spray.can
-
-import org.slf4j.LoggerFactory
-import java.nio.channels.{SocketChannel, SelectionKey, ServerSocketChannel}
+import akka.actor.Props
+import java.nio.channels.{ SocketChannel, SelectionKey, ServerSocketChannel }
 import java.io.IOException
 import java.net.InetAddress
 import java.nio.ByteBuffer
 import annotation.tailrec
-import akka.actor.{ActorRef, Actor, PoisonPill}
+import akka.actor.{ ActorRef, Actor, PoisonPill }
 import HttpProtocols._
-import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger, AtomicReference}
-import akka.dispatch.{CompletableFuture, DefaultCompletableFuture, Future}
+import java.util.concurrent.atomic.{ AtomicBoolean, AtomicInteger, AtomicReference }
+import akka.dispatch.{ Promise, Future }
 
 /////////////////////////////////////////////
 // HttpServer messages
@@ -42,8 +41,7 @@ import akka.dispatch.{CompletableFuture, DefaultCompletableFuture, Future}
 case class RequestContext(
   request: HttpRequest,
   remoteAddress: InetAddress,
-  responder: RequestResponder
-)
+  responder: RequestResponder)
 
 /**
  * When the service actor does not reply to a dispatched [[cc.spray.can.RequestContext]] within the time period
@@ -56,8 +54,7 @@ case class Timeout(
   protocol: HttpProtocol,
   headers: List[HttpHeader],
   remoteAddress: InetAddress,
-  complete: HttpResponse => Unit
-)
+  complete: HttpResponse => Unit)
 
 /**
  * An instance of this trait is used by the application to complete incoming requests.
@@ -116,19 +113,19 @@ object HttpServer {
     val responseNr: Int,
     val increaseResponseNr: Boolean = true,
     val requestRecord: Option[RequestRecord] = None,
-    val onSent: Option[CompletableFuture[Unit]] = None) {
+    val onSent: Option[Promise[Unit]] = None) {
     var next: Respond = _
     def toList: List[Respond] = this :: (if (next != null) next.toList else Nil)
   }
   private[can] case class RequestRecord(method: HttpMethod, uri: String, protocol: HttpProtocol,
-                                        headers: List[HttpHeader], remoteAddress: InetAddress,
-                                        responder: RequestResponder) extends LinkedList.Element[RequestRecord]
+    headers: List[HttpHeader], remoteAddress: InetAddress,
+    responder: RequestResponder) extends LinkedList.Element[RequestRecord]
 
   private[can] case class ChunkingContext(requestLine: RequestLine, headers: List[HttpHeader],
-                                          connectionHeader: Option[String], streamActor: ActorRef)
+    connectionHeader: Option[String], streamActor: ActorRef)
 
   private[can] class ServerConnection(key: SelectionKey, emptyRequestParser: EmptyRequestParser)
-          extends Connection[ServerConnection](key) {
+    extends Connection[ServerConnection](key) {
     var requestsDispatched = 0
     var responseNr = 0
     var currentRespond: Respond = _
@@ -180,28 +177,25 @@ object HttpServer {
  * An `HttpServer` also reacts to [[cc.spray.can.GetStats]] messages.
  */
 class HttpServer(val config: ServerConfig = ServerConfig.fromAkkaConf)
-        extends HttpPeer("spray-can-server") with ResponsePreparer {
+  extends HttpPeer("spray-can-server") with ResponsePreparer {
   import HttpServer._
 
-  private lazy val log = LoggerFactory.getLogger(getClass)
   private lazy val serverSocketChannel = make(ServerSocketChannel.open) { channel =>
     channel.configureBlocking(false)
     channel.socket.bind(config.endpoint)
     channel.register(selector, SelectionKey.OP_ACCEPT)
   }
-  private lazy val serviceActor = actor(config.serviceActorId)
-  private lazy val timeoutActor = actor(config.timeoutActorId)
+  private lazy val serviceActor = context.actorFor(config.serviceActorName)
+  private lazy val timeoutActor = context.actorFor(config.timeoutActorName)
   private val openRequests = new LinkedList[RequestRecord]
   private val openTimeouts = new LinkedList[RequestRecord]
 
-  private[can] type Conn = ServerConnection
+  private[can]type Conn = ServerConnection
 
   private val StartRequestParser = new EmptyRequestParser(config.parserConfig)
   private lazy val streamActorCreator = config.streamActorCreator.getOrElse {
     BufferingRequestStreamActor.creator(serviceActor, config.parserConfig.maxContentLength)
   }
-
-  self.id = config.serverActorId
 
   override def preStart() {
     log.info("Starting spray-can HTTP server on {}", config.endpoint)
@@ -235,8 +229,8 @@ class HttpServer(val config: ServerConfig = ServerConfig.fromAkkaConf)
           prepareWriting(respond)
         } else conn.enqueue(respond)
       } else {
-        log.warn("Dropping %s due to closed connection".format(if (respond.increaseResponseNr) "response" else "chunk"))
-        respond.onSent.foreach(_.completeWithException(new ClientClosedConnectionException))
+        log.warning("Dropping %s due to closed connection".format(if (respond.increaseResponseNr) "response" else "chunk"))
+        respond.onSent.foreach(_.failure(new ClientClosedConnectionException))
         requestRecord.foreach { rec =>
           rec.memberOf -= rec // remove from either the openRequests or the openTimeouts list
         }
@@ -270,7 +264,7 @@ class HttpServer(val config: ServerConfig = ServerConfig.fromAkkaConf)
 
   protected def finishWrite(conn: Conn) {
     if (conn.writeBuffers.isEmpty) {
-      conn.currentRespond.onSent.foreach(_.completeWithResult(()))
+      conn.currentRespond.onSent.foreach(_.success(()))
       if (conn.currentRespond.closeAfterWrite) {
         close(conn)
       } else {
@@ -307,9 +301,8 @@ class HttpServer(val config: ServerConfig = ServerConfig.fromAkkaConf)
     import requestLine._
     val remoteAddress = conn.key.channel.asInstanceOf[SocketChannel].socket.getInetAddress
     log.debug("Dispatching start of chunked {} request to '{}' to a new stream actor", method, uri)
-    val streamActor = Actor.actorOf(
-      streamActorCreator(ChunkedRequestContext(HttpRequest(method, uri, headers), remoteAddress))
-    ).start()
+    val streamActor = context.actorOf(Props(
+      streamActorCreator(ChunkedRequestContext(HttpRequest(method, uri, headers), remoteAddress))))
     conn.chunkingContext = ChunkingContext(requestLine, headers, connectionHeader, streamActor)
     conn.messageParser = new ChunkParser(config.parserConfig)
   }
@@ -329,7 +322,7 @@ class HttpServer(val config: ServerConfig = ServerConfig.fromAkkaConf)
   }
 
   private def createAndRegisterRequestResponder(conn: Conn, requestLine: RequestLine, headers: List[HttpHeader],
-                                                remoteAddress: InetAddress, connectionHeader: Option[String]) = {
+    remoteAddress: InetAddress, connectionHeader: Option[String]) = {
     var requestRecord: Option[RequestRecord] = None
     val responder = new DefaultRequestResponder(conn, requestLine, conn.countDispatch(), connectionHeader, requestRecord)
     if (requestTimeoutCycle.isDefined) {
@@ -341,7 +334,7 @@ class HttpServer(val config: ServerConfig = ServerConfig.fromAkkaConf)
   }
 
   protected def handleParseError(conn: Conn, parser: ErrorParser) {
-    log.warn("Illegal request, responding with status {} and '{}'", parser.status, parser.message)
+    log.warning("Illegal request, responding with status {} and '{}'", parser.status, parser.message)
     val response = HttpResponse(status = parser.status,
       headers = List(HttpHeader("Content-Type", "text/plain"))).withBody(parser.message)
     // In case of a request parsing error we probably stopped reading the request somewhere in between, where we
@@ -354,7 +347,7 @@ class HttpServer(val config: ServerConfig = ServerConfig.fromAkkaConf)
 
   protected def handleTimedOutRequests() {
     openRequests.forAllTimedOut(config.requestTimeout) { record =>
-      log.warn("A request to '{}' timed out, dispatching to the TimeoutActor '{}'", record.uri, config.timeoutActorId)
+      log.warning("A request to '{}' timed out, dispatching to the TimeoutActor '{}'", record.uri, config.timeoutActorName)
       openRequests -= record
       openTimeouts += record
       import record._
@@ -363,7 +356,7 @@ class HttpServer(val config: ServerConfig = ServerConfig.fromAkkaConf)
     }
     openTimeouts.forAllTimedOut(config.timeoutTimeout) { record =>
       import record._
-      log.warn("The TimeoutService for '{}' timed out as well, responding with the static error reponse", uri)
+      log.warning("The TimeoutService for '{}' timed out as well, responding with the static error reponse", uri)
       record.responder.asInstanceOf[DefaultRequestResponder].timeoutResponder {
         timeoutTimeoutResponse(method, uri, protocol, headers, remoteAddress)
       }
@@ -376,10 +369,10 @@ class HttpServer(val config: ServerConfig = ServerConfig.fromAkkaConf)
    * via the `HttpServers` [[cc.spray.can.ServerConfig]].
    */
   protected def timeoutTimeoutResponse(method: HttpMethod, uri: String, protocol: HttpProtocol,
-                                       headers: List[HttpHeader], remoteAddress: InetAddress): HttpResponse = {
+    headers: List[HttpHeader], remoteAddress: InetAddress): HttpResponse = {
     HttpResponse(status = 500, headers = List(HttpHeader("Content-Type", "text/plain"))).withBody {
       "Ooops! The server was not able to produce a timely response to your request.\n" +
-              "Please try again in a short while!"
+        "Please try again in a short while!"
     }
   }
 
@@ -393,7 +386,7 @@ class HttpServer(val config: ServerConfig = ServerConfig.fromAkkaConf)
   protected def serverHeader = config.serverHeader
 
   private class DefaultRequestResponder(conn: Conn, requestLine: RequestLine, responseNr: Int,
-                                        connectionHeader: Option[String], requestRecord: => Option[RequestRecord])
+    connectionHeader: Option[String], requestRecord: => Option[RequestRecord])
     extends RequestResponder {
 
     private val UNCOMPLETED = 0
@@ -404,10 +397,10 @@ class HttpServer(val config: ServerConfig = ServerConfig.fromAkkaConf)
     def complete(response: HttpResponse) {
       if (!trySend(response)) mode.get match {
         case COMPLETED =>
-          log.warn("Received an additional response for an already completed request to '{}', ignoring...", requestLine.uri)
+          log.warning("Received an additional response for an already completed request to '{}', ignoring...", requestLine.uri)
         case STREAMING =>
-          log.warn("Received a regular response for a request to '{}', " +
-                   "that a chunked response has already been started/completed, ignoring...", requestLine.uri)
+          log.warning("Received a regular response for a request to '{}', " +
+            "that a chunked response has already been started/completed, ignoring...", requestLine.uri)
       }
     }
 
@@ -447,20 +440,20 @@ class HttpServer(val config: ServerConfig = ServerConfig.fromAkkaConf)
     def resetConnectionTimeout() { self ! RefreshConnection(conn) }
 
     class DefaultChunkedResponder(closeAfterLastChunk: Boolean, initialChunkSent: Boolean) extends ChunkedResponder {
+      import context.system
       private var closed = false
 
       def sendChunk(chunk: MessageChunk) = {
         synchronized {
           if (!closed) {
             log.debug("Enqueueing response chunk")
-            val sentFuture = new DefaultCompletableFuture[Unit](Long.MaxValue)
+            val sentFuture = Promise[Unit]
             self ! new Respond(conn,
               buffers = prepareChunk(chunk.extensions, chunk.body),
               closeAfterWrite = false,
               responseNr = responseNr,
               increaseResponseNr = false,
-              onSent = Some(sentFuture)
-            )
+              onSent = Some(sentFuture))
             sentFuture
           } else throw new RuntimeException("Cannot send MessageChunk after HTTP stream has been closed")
         }

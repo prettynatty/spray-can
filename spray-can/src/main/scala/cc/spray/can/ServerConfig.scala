@@ -16,9 +16,10 @@
 
 package cc.spray.can
 
-import akka.config.Config._
-import java.net.InetSocketAddress
 import akka.actor.Actor
+import com.typesafe.config.ConfigException
+import com.typesafe.config.ConfigFactory
+import java.net.InetSocketAddress
 
 /**
  * The common configuration elements of a [[cc.spray.can.ServerConfig]] and a [[cc.spray.can.ClientConfig]].
@@ -100,12 +101,10 @@ trait PeerConfig {
  */
 case class ServerConfig(
   // ServerConfig
-
   host: String = "localhost",
   port: Int = 8080,
-  serverActorId: String = "spray-can-server",
-  serviceActorId: String = "spray-root-service",
-  timeoutActorId: String = "spray-root-service",
+  serviceActorName: String = "spray-root-service",
+  timeoutActorName: String = "spray-root-service",
   timeoutTimeout: Long = 500,
   serverHeader: String = "spray-can/" + SprayCanVersion,
 
@@ -121,9 +120,8 @@ case class ServerConfig(
   parserConfig: MessageParserConfig = MessageParserConfig()
 ) extends PeerConfig {
 
-  require(!serverActorId.isEmpty, "serverActorId must not be empty")
-  require(!serviceActorId.isEmpty, "serviceActorId must not be empty")
-  require(!timeoutActorId.isEmpty, "timeoutActorId must not be empty")
+  require(!serviceActorName.isEmpty, "serviceActorName must not be empty")
+  require(!timeoutActorName.isEmpty, "timeoutActorName must not be empty")
   require(timeoutTimeout >= 0, "timeoutTimeout must be >= 0 ms")
 
   def endpoint = new InetSocketAddress(host, port)
@@ -131,9 +129,8 @@ case class ServerConfig(
   override def toString =
     "ServerConfig(\n" +
     "  endpoint       : " + endpoint + "\n" +
-    "  serverActorId  : " + serverActorId + "\n" +
-    "  serviceActorId : " + serviceActorId + "\n" +
-    "  timeoutActorId : " + timeoutActorId + "\n" +
+    "  serviceActorId : " + serviceActorName + "\n" +
+    "  timeoutActorId : " + timeoutActorName + "\n" +
     "  timeoutTimeout : " + timeoutTimeout + " ms\n" +
     "  serverHeader   : " + serverHeader + "\n" +
     "  readBufferSize : " + readBufferSize + " bytes\n" +
@@ -144,27 +141,41 @@ case class ServerConfig(
     ")"
 }
 
-object ServerConfig {
+trait ConfigHelper {
+  lazy val appConf = ConfigFactory.load()
 
+  def getValue[A](path: String, default: A): A = try {
+    appConf.getAnyRef(path).asInstanceOf[A]
+  } catch {
+    case e: ConfigException => default
+  }
+
+  def valueFor[A](path: String): Option[A] = try {
+    Some(appConf.getAnyRef(path).asInstanceOf[A])
+  } catch {
+    case e: ConfigException => None
+  }
+}
+  
+object ServerConfig extends ConfigHelper {
   /**
    * Returns a `ServerConfig` constructed from the `spray-can` section of the applications `akka.conf` file.
    */
   lazy val fromAkkaConf = ServerConfig(
     // ServerConfig
-    host           = config.getString("spray-can.server.host", "localhost"),
-    port           = config.getInt("spray-can.server.port", 8080),
-    serverActorId  = config.getString("spray-can.server.server-actor-id", "spray-can-server"),
-    serviceActorId = config.getString("spray-can.server.service-actor-id", "spray-root-service"),
-    timeoutActorId = config.getString("spray-can.server.timeout-actor-id", "spray-root-service"),
-    timeoutTimeout = config.getLong("spray-can.server.timeout-timeout", 500),
-    serverHeader   = config.getString("spray-can.server.server-header", "spray-can/" + SprayCanVersion),
+    host           = valueFor("spray-can.server.host").getOrElse("localhost"),
+    port           = valueFor("spray-can.server.port").getOrElse(8080),
+    serviceActorName = valueFor("spray-can.server.service-actor-id").getOrElse("spray-root-service"),
+    timeoutActorName = valueFor("spray-can.server.timeout-actor-id").getOrElse("spray-root-service"),
+    timeoutTimeout = valueFor("spray-can.server.timeout-timeout").getOrElse(500),
+    serverHeader   = valueFor("spray-can.server.server-header").getOrElse("spray-can/" + SprayCanVersion),
 
     // PeerConfig
-    readBufferSize = config.getInt("spray-can.server.read-buffer-size", 8192),
-    idleTimeout    = config.getLong("spray-can.server.idle-timeout", 10000),
-    reapingCycle   = config.getLong("spray-can.server.reaping-cycle", 500),
-    requestTimeout = config.getLong("spray-can.server.request-timeout", 5000),
-    timeoutCycle   = config.getLong("spray-can.server.timeout-cycle", 200),
+    readBufferSize = valueFor("spray-can.server.read-buffer-size").getOrElse(8192),
+    idleTimeout    = valueFor("spray-can.server.idle-timeout").getOrElse(10000),
+    reapingCycle   = valueFor("spray-can.server.reaping-cycle").getOrElse(500),
+    requestTimeout = valueFor("spray-can.server.request-timeout").getOrElse(5000),
+    timeoutCycle   = valueFor("spray-can.server.timeout-cycle").getOrElse(200),
     parserConfig   = MessageParserConfig.fromAkkaConf
   )
 }
@@ -179,7 +190,6 @@ object ServerConfig {
  */
 case class ClientConfig(
   // ClientConfig
-  clientActorId: String = "spray-can-client",
   userAgentHeader: String = "spray-can/" + SprayCanVersion,
 
   // PeerConfig
@@ -191,11 +201,8 @@ case class ClientConfig(
   parserConfig: MessageParserConfig = MessageParserConfig()
 ) extends PeerConfig {
 
-  require(!clientActorId.isEmpty, "clientActorId must not be empty")
-
   override def toString =
     "ClientConfig(\n" +
-    "  clientActorId  : " + clientActorId + "\n" +
     "  userAgentHeader: " + userAgentHeader + "\n" +
     "  readBufferSize : " + readBufferSize + " bytes\n" +
     "  idleTimeout    : " + idleTimeout + " ms\n" +
@@ -205,18 +212,17 @@ case class ClientConfig(
     ")"
 }
 
-object ClientConfig {
+object ClientConfig extends ConfigHelper {
   lazy val fromAkkaConf = ClientConfig(
     // ClientConfig
-    clientActorId   = config.getString("spray-can.client.client-actor-id", "spray-can-client"),
-    userAgentHeader = config.getString("spray-can.client.user-agent-header", "spray-can/" + SprayCanVersion),
+    userAgentHeader = valueFor("spray-can.client.user-agent-header").getOrElse("spray-can/" + SprayCanVersion),
 
     // PeerConfig
-    readBufferSize = config.getInt("spray-can.client.read-buffer-size", 8192),
-    idleTimeout    = config.getLong("spray-can.client.idle-timeout", 10000),
-    reapingCycle   = config.getLong("spray-can.client.reaping-cycle", 500),
-    requestTimeout = config.getLong("spray-can.client.request-timeout", 5000),
-    timeoutCycle   = config.getLong("spray-can.client.timeout-cycle", 200),
+    readBufferSize = valueFor("spray-can.client.read-buffer-size").getOrElse(8192),
+    idleTimeout    = valueFor("spray-can.client.idle-timeout").getOrElse(10000),
+    reapingCycle   = valueFor("spray-can.client.reaping-cycle").getOrElse(500),
+    requestTimeout = valueFor("spray-can.client.request-timeout").getOrElse(5000),
+    timeoutCycle   = valueFor("spray-can.client.timeout-cycle").getOrElse(200),
     parserConfig   = MessageParserConfig.fromAkkaConf
   )
 }
@@ -239,17 +245,17 @@ case class MessageParserConfig(
   maxChunkSize: Int = 1024 * 1024   // default chunk size limit = 1 MB
 )
 
-object MessageParserConfig {
+object MessageParserConfig extends ConfigHelper {
   lazy val fromAkkaConf = MessageParserConfig(
-    maxUriLength            = config.getInt("spray-can.parser.max-uri-length", 2048),
-    maxResponseReasonLength = config.getInt("spray-can.parser.max-response-reason-length", 64),
-    maxHeaderNameLength     = config.getInt("spray-can.parser.max-header-name-length", 64),
-    maxHeaderValueLength    = config.getInt("spray-can.parser.max-header-value-length", 8192),
-    maxHeaderCount          = config.getInt("spray-can.parser.max-header-count-length", 64),
-    maxContentLength        = config.getInt("spray-can.parser.max-content-length", 8192 * 1024),
-    maxChunkExtNameLength   = config.getInt("spray-can.parser.max-chunk-ext-name-length", 64),
-    maxChunkExtValueLength  = config.getInt("spray-can.parser.max-chunk-ext-value-length", 256),
-    maxChunkExtCount        = config.getInt("spray-can.parser.max-chunk-ext-count", 16),
-    maxChunkSize            = config.getInt("spray-can.parser.max-chunk-size", 1024 * 1024)
+    maxUriLength            = valueFor("spray-can.parser.max-uri-length").getOrElse(2048),
+    maxResponseReasonLength = valueFor("spray-can.parser.max-response-reason-length").getOrElse(64),
+    maxHeaderNameLength     = valueFor("spray-can.parser.max-header-name-length").getOrElse(64),
+    maxHeaderValueLength    = valueFor("spray-can.parser.max-header-value-length").getOrElse(8192),
+    maxHeaderCount          = valueFor("spray-can.parser.max-header-count-length").getOrElse(64),
+    maxContentLength        = valueFor("spray-can.parser.max-content-length").getOrElse(8192 * 1024),
+    maxChunkExtNameLength   = valueFor("spray-can.parser.max-chunk-ext-name-length").getOrElse(64),
+    maxChunkExtValueLength  = valueFor("spray-can.parser.max-chunk-ext-value-length").getOrElse(256),
+    maxChunkExtCount        = valueFor("spray-can.parser.max-chunk-ext-count").getOrElse(16),
+    maxChunkSize            = valueFor("spray-can.parser.max-chunk-size").getOrElse(1024 * 1024)
   )
 }

@@ -23,7 +23,7 @@ import akka.actor.{ActorRef, Actor}
  * [[cc.spray.can.ChunkedRequestEnd]] to construct a full [[cc.spray.can.HttpResponse]] instance and dispatch it to a
  * given service actor.
  */
-class BufferingRequestStreamActor(serviceActor: ActorRef, maxContentLength: Int, context: ChunkedRequestContext)
+class BufferingRequestStreamActor(serviceActor: ActorRef, maxContentLength: Int, requestContext: ChunkedRequestContext)
         extends Actor {
 
   var body: Array[Byte] = _
@@ -37,7 +37,7 @@ class BufferingRequestStreamActor(serviceActor: ActorRef, maxContentLength: Int,
       case _ if body.length + x.body.length <= maxContentLength =>
         body = body concat x.body
         totalBytes = body.length
-      case _ => become {
+      case _ => context.become {
         case x: MessageChunk => totalBytes += x.body.length
         case x: ChunkedRequestEnd => x.responder.complete {
           HttpResponse(
@@ -50,15 +50,15 @@ class BufferingRequestStreamActor(serviceActor: ActorRef, maxContentLength: Int,
       }
     }
     case x: ChunkedRequestEnd => serviceActor ! RequestContext(
-      request = context.request.copy(body = body),
-      remoteAddress = context.remoteAddress,
+      request = requestContext.request.copy(body = body),
+      remoteAddress = requestContext.remoteAddress,
       x.responder
     )
   }
 }
 
 object BufferingRequestStreamActor {
-  def creator(serviceActor: ActorRef, maxContentLength: Int): ChunkedRequestContext => Actor = { context =>
-    new BufferingRequestStreamActor(serviceActor, maxContentLength, context)
+  def creator(serviceActor: ActorRef, maxContentLength: Int): ChunkedRequestContext => Actor = { requestContext =>
+    new BufferingRequestStreamActor(serviceActor, maxContentLength, requestContext)
   }
 }

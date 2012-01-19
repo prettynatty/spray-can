@@ -79,11 +79,6 @@ trait ChunkedRequester {
    * Chunked responses are handled in analogy to the `sendAndReceive` method of the [[cc.spray.can.HttpConnection]].
    */
   def closeAndReceive(receiver: ActorRef, context: Option[Any] = None, extensions: List[ChunkExtension] = Nil,
-                      trailer: List[HttpHeader] = Nil)
+    trailer: List[HttpHeader] = Nil)
 }
-
-
-
-
-
 

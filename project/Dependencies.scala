@@ -4,16 +4,17 @@ object Dependencies {
 
   val resolutionRepos = Seq(
     "Typesafe Repository" at "http://repo.typesafe.com/typesafe/releases/",
+    "Typesafe snapshots" at "http://repo.typesafe.com/typesafe/snapshots/",
     ScalaToolsSnapshots
   )
 
   object V {
-    val akka      = "2.0-M2"
-    val logback   = "0.9.29"
+    val akka      = "2.0-SNAPSHOT"
+    val logback   = "1.0.0"
   }
 
   object Compile {
-    val slf4j         = "org.slf4j"                 %   "slf4j-api"                 % "1.6.1"     % "compile"
+    val slf4j         = "org.slf4j"                 %   "slf4j-api"                 % "1.6.4"     % "compile"
     val akkaActor     = "com.typesafe.akka"         %   "akka-actor"                % V.akka      % "compile"
   }
 
@@ -31,5 +32,4 @@ object Dependencies {
     val akkaSlf4j     = "com.typesafe.akka"         %   "akka-slf4j"                % V.akka      % "runtime"
     val logback       = "ch.qos.logback"            %   "logback-classic"           % V.logback   % "runtime"
   }
-
 }

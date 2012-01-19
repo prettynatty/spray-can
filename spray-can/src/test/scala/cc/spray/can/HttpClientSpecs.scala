@@ -16,29 +16,32 @@
 
 package cc.spray.can
 
-import org.specs2._
-import specification.Step
 import HttpMethods._
-import akka.actor.{Scheduler, Actor}
-import java.util.concurrent.TimeUnit
+import akka.actor.{Actor, ActorSystem, Props, Scheduler}
+import akka.dispatch.Await
+import akka.util
 import akka.util.Duration
+import org.specs2.Specification
+import org.specs2.specification._
 
-trait HttpClientSpecs extends Specification { def clientSpecs =
 
-  "This spec exercises the HttpClient timeout logic"    ^
-                                                        p^
-                                                        Step(start())^
-  "simple one-request dialog"                           ! oneRequest^
-  "connect to a non-existing server"                    ! illegalConnect^
-  "time-out request"                                    ! timeoutRequest^
-  "idle-time-out connection"                            ! timeoutConnection^
-                                                        end
+trait HttpClientSpecs extends Specification {
+  implicit val system = ActorSystem("specs")
+  def clientSpecs =
+
+    "This spec exercises the HttpClient timeout logic" ^
+      p ^
+      Step(start()) ^
+      "simple one-request dialog" ! oneRequest ^
+      "connect to a non-existing server" ! illegalConnect ^
+      "time-out request" ! timeoutRequest ^
+      "idle-time-out connection" ! timeoutConnection ^
+      end
 
   private class TestService extends Actor {
-    self.id = "client-test-server"
     protected def receive = {
       case RequestContext(HttpRequest(_, "/wait500", _, _, _), _, responder) => {
-        Scheduler.scheduleOnce(() => responder.complete(HttpResponse()), 500, TimeUnit.MILLISECONDS)
+        context.system.scheduler.scheduleOnce(Duration.create(500, "millis")) { responder.complete(HttpResponse()) }
       }
       case RequestContext(HttpRequest(method, uri, _, _, _), _, responder) =>
         responder.complete(HttpResponse().withBody(method + "|" + uri))
@@ -46,45 +49,55 @@ trait HttpClientSpecs extends Specification { def clientSpecs =
   }
 
   import HttpClient._
-
+  import Await._
+  implicit val timeout = new util.Timeout(Long.MaxValue)
+  
   private def oneRequest = {
-    dialog()
-            .send(HttpRequest(GET, "/yeah"))
-            .end
-            .get.bodyAsString mustEqual "GET|/yeah"
+    result(dialog()
+      .send(HttpRequest(GET, "/yeah"))
+      .end, timeout.duration)
+      .bodyAsString mustEqual "GET|/yeah"
   }
 
   private def illegalConnect = {
-    dialog(16243)
-            .send(HttpRequest(GET, "/"))
-            .end
-            .await.exception.get.toString mustEqual "cc.spray.can.HttpClientException: " +
-            "Could not connect to localhost:16243 due to java.net.ConnectException: Connection refused"
+    val f = dialog(16243)
+      .send(HttpRequest(GET, "/"))
+      .end
+    f recover {
+      case e => e.toString
+    }
+    result(f, timeout.duration) mustEqual "cc.spray.can.HttpClientException: " +
+      "Could not connect to localhost:16243 due to java.net.ConnectException: Connection refused"
   }
 
   private def timeoutRequest = {
-    dialog()
-            .send(HttpRequest(GET, "/wait500"))
-            .end
-            .await.exception.get.toString mustEqual "cc.spray.can.HttpClientException: Request timed out"
+    val f = dialog()
+      .send(HttpRequest(GET, "/wait500"))
+      .end
+    f recover {
+      case e => e.toString
+    }
+    result(f, timeout.duration) mustEqual "cc.spray.can.HttpClientException: Request timed out"
   }
 
   private def timeoutConnection = {
-    dialog()
-            .waitIdle(Duration("500 ms"))
-            .send(HttpRequest(GET, "/"))
-            .end
-            .await.exception.get.toString mustEqual "cc.spray.can.HttpClientException: " +
-            "Cannot send request due to closed connection"
+    val f = dialog()
+      .waitIdle(Duration("500 ms"))
+      .send(HttpRequest(GET, "/"))
+      .end
+    f recover {
+      case e => e.toString
+    }
+    result(f, timeout.duration) mustEqual "cc.spray.can.HttpClientException: " +
+      "Cannot send request due to closed connection"
   }
 
   private def dialog(port: Int = 16242) =
-    HttpDialog(host = "localhost", port = port, clientActorId = "client-test-client")
+    HttpDialog(host = "localhost", port = port, clientActorName = "client-test-client")
 
   private def start() {
-    Actor.actorOf(new TestService).start()
-    Actor.actorOf(new HttpServer(ServerConfig(port = 16242, serviceActorId = "client-test-server", requestTimeout = 0))).start()
-    Actor.actorOf(new HttpClient(ClientConfig(clientActorId = "client-test-client",
-      requestTimeout = 100, timeoutCycle = 50, idleTimeout = 200, reapingCycle = 100))).start()
+    system.actorOf(Props(new TestService), name = "client-test-server")
+    system.actorOf(Props(new HttpServer(ServerConfig(port = 16242, serviceActorName = "client-test-server", requestTimeout = 0))))
+    system.actorOf(Props(new HttpClient(ClientConfig(requestTimeout = 100, timeoutCycle = 50, idleTimeout = 200, reapingCycle = 100))), name = "client-test-client")
   }
 }
