@@ -181,6 +181,7 @@ class HttpServer(val config: ServerConfig = ServerConfig.fromAkkaConf)
   import HttpServer._
 
   private lazy val serverSocketChannel = make(ServerSocketChannel.open) { channel =>
+    log.info("in serverSocketChannel")
     channel.configureBlocking(false)
     channel.socket.bind(config.endpoint)
     channel.register(selector, SelectionKey.OP_ACCEPT)

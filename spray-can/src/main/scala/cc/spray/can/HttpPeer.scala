@@ -96,6 +96,7 @@ private[can] abstract class HttpPeer(threadName: String) extends Actor with Acto
 
   override def preStart() {
     // CAUTION: as of Akka 2.0 this method will not be called during a restart
+    log.info("Calling preStart()")
     startTime = System.currentTimeMillis()
     self ! Select // start the selection loop
   }
@@ -112,8 +113,15 @@ private[can] abstract class HttpPeer(threadName: String) extends Actor with Acto
   }
 
   protected def receive = {
-    case Select => selectorActor ! Select
-    case Selected => processSelected()
+    case Select => {
+      log.info("in receive:Select")
+      selectorActor ! Select
+      log.info("did selectorActor ! Select")
+    }
+    case Selected => {
+      log.info("In Selected")
+      processSelected()
+    }
     case HandleTimedOutRequests => handleTimedOutRequests()
     case ReapIdleConnections => connections.forAllTimedOut(config.idleTimeout)(reapConnection)
     case RefreshConnection(conn) => connections.refresh(conn)
@@ -121,17 +129,20 @@ private[can] abstract class HttpPeer(threadName: String) extends Actor with Acto
   }
 
   private def processSelected() {
+    log.info("In processSelected()")
     val selectedKeys = selector.selectedKeys.iterator
+    log.info("selectedKeys.hasNext: {}",selectedKeys.hasNext)
     while (selectedKeys.hasNext) {
       val key = selectedKeys.next
       selectedKeys.remove()
       if (key.isValid) {
-        if (key.isWritable) write(key) // favor writes if writeable as well as readable
-        else if (key.isReadable) read(key)
-        else handleConnectionEvent(key)
+        if (key.isWritable) {log.info("writeable"); write(key)} // favor writes if writeable as well as readable
+        else if (key.isReadable) {log.info("readable"); read(key)}
+        else {log.info("handleConnectionEvent"); handleConnectionEvent(key)}
       } else log.warning("Invalid selection key: {}", key)
     }
     self ! Select // loop
+    log.info("exiting processSelected()")
   }
 
   private def read(key: SelectionKey) {
