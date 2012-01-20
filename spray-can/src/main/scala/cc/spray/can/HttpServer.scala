@@ -181,13 +181,13 @@ class HttpServer(val config: ServerConfig = ServerConfig.fromAkkaConf)
   import HttpServer._
 
   private lazy val serverSocketChannel = make(ServerSocketChannel.open) { channel =>
-    log.info("in serverSocketChannel")
+    log.debug("in serverSocketChannel")
     channel.configureBlocking(false)
     channel.socket.bind(config.endpoint)
     channel.register(selector, SelectionKey.OP_ACCEPT)
   }
-  private lazy val serviceActor = context.actorFor(config.serviceActorName)
-  private lazy val timeoutActor = context.actorFor(config.timeoutActorName)
+  private lazy val serviceActor = context.system.actorFor("/user/"+config.serviceActorName)
+  private lazy val timeoutActor = context.system.actorFor("/user/"+config.timeoutActorName)
   private val openRequests = new LinkedList[RequestRecord]
   private val openTimeouts = new LinkedList[RequestRecord]
 
@@ -212,7 +212,7 @@ class HttpServer(val config: ServerConfig = ServerConfig.fromAkkaConf)
   }
 
   override def postStop() {
-    log.info("Stopped spray-can HTTP server on {}", config.endpoint)
+    log.debug("Stopped spray-can HTTP server on {}", config.endpoint)
     super.postStop()
   }
 
@@ -291,6 +291,7 @@ class HttpServer(val config: ServerConfig = ServerConfig.fromAkkaConf)
     val remoteAddress = conn.key.channel.asInstanceOf[SocketChannel].socket.getInetAddress
     val responder = createAndRegisterRequestResponder(conn, requestLine, parser.headers, remoteAddress, parser.connectionHeader)
     val request = HttpRequest(method, uri, parser.headers, parser.body, protocol)
+    log.debug("serviceActor {}",serviceActor)
     serviceActor ! RequestContext(request, remoteAddress, responder)
     conn.messageParser = StartRequestParser // switch back to parsing the next request from the start
     requestsDispatched += 1

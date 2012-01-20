@@ -96,7 +96,7 @@ private[can] abstract class HttpPeer(threadName: String) extends Actor with Acto
 
   override def preStart() {
     // CAUTION: as of Akka 2.0 this method will not be called during a restart
-    log.info("Calling preStart()")
+    log.debug("Calling preStart()")
     startTime = System.currentTimeMillis()
     self ! Select // start the selection loop
   }
@@ -114,12 +114,12 @@ private[can] abstract class HttpPeer(threadName: String) extends Actor with Acto
 
   protected def receive = {
     case Select => {
-      log.info("in receive:Select")
+      log.debug("in receive:Select")
       selectorActor ! Select
-      log.info("did selectorActor ! Select")
+      log.debug("did selectorActor ! Select")
     }
     case Selected => {
-      log.info("In Selected")
+      log.debug("In Selected")
       processSelected()
     }
     case HandleTimedOutRequests => handleTimedOutRequests()
@@ -129,20 +129,20 @@ private[can] abstract class HttpPeer(threadName: String) extends Actor with Acto
   }
 
   private def processSelected() {
-    log.info("In processSelected()")
+    log.debug("In processSelected()")
     val selectedKeys = selector.selectedKeys.iterator
-    log.info("selectedKeys.hasNext: {}",selectedKeys.hasNext)
+    log.debug("selectedKeys.hasNext: {}",selectedKeys.hasNext)
     while (selectedKeys.hasNext) {
       val key = selectedKeys.next
       selectedKeys.remove()
       if (key.isValid) {
-        if (key.isWritable) {log.info("writeable"); write(key)} // favor writes if writeable as well as readable
-        else if (key.isReadable) {log.info("readable"); read(key)}
-        else {log.info("handleConnectionEvent"); handleConnectionEvent(key)}
+        if (key.isWritable) {log.debug("writeable"); write(key)} // favor writes if writeable as well as readable
+        else if (key.isReadable) {log.debug("readable"); read(key)}
+        else {log.debug("handleConnectionEvent"); handleConnectionEvent(key)}
       } else log.warning("Invalid selection key: {}", key)
     }
     self ! Select // loop
-    log.info("exiting processSelected()")
+    log.debug("exiting processSelected()")
   }
 
   private def read(key: SelectionKey) {
