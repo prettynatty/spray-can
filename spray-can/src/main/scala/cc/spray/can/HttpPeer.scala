@@ -92,7 +92,7 @@ private[can] abstract class HttpPeer(threadName: String) extends Actor with Acto
     }
   }
 
-  val selectorActor = context.actorOf(Props(new SelectorActor(selector)).withDispatcher("pinned-dispatcher"))
+  val selectorActor = context.actorOf(Props(new SelectorActor(selector)).withDispatcher("pinned-dispatcher"), name = "selector")
 
   override def preStart() {
     // CAUTION: as of Akka 2.0 this method will not be called during a restart

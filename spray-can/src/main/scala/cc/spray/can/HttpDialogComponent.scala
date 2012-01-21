@@ -113,10 +113,11 @@ trait HttpDialogComponent {
      */
     def end: Future[A] = resultF.onComplete { _ =>
       connectionF.onComplete {
-        case conn: HttpConnection => {
+        case Right(conn: HttpConnection) =>
           log.debug("Closing connection after HttpDialog completion")
           conn.close()
-        }
+        case Left(e: Throwable) =>
+          log.error("Received connection error - {}", e.getMessage)
       }
     }
 

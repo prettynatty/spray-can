@@ -318,7 +318,7 @@ class HttpClient(val config: ClientConfig = ClientConfig.fromAkkaConf) extends H
       def close(extensions: List[ChunkExtension], trailer: List[HttpHeader]) = {
         // we "disable" the akka future timeout, since we rely on our own logic
         val future = Promise[HttpResponse]
-        val actor = context.actorOf(Props(new DefaultReceiverActor(future, config.parserConfig.maxContentLength)))
+        val actor = context.actorOf(Props(new DefaultReceiverActor(future, config.parserConfig.maxContentLength)), name = "default-receiver-actor")
         closeAndReceive(actor, None, extensions, trailer)
         future
       }
