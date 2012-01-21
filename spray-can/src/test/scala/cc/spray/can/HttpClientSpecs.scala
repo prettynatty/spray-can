@@ -50,7 +50,7 @@ trait HttpClientSpecs extends Specification {
 
   import HttpClient._
   import Await._
-  implicit val timeout = new util.Timeout(Duration.create(5, "seconds"))
+  implicit val timeout = system.settings.ActorTimeout
   
   private def oneRequest = {
     result(dialog()
