@@ -141,7 +141,7 @@ trait HttpDialogComponent {
     def apply(host: String, port: Int = 80,
       clientActorName: String)(implicit system: ActorSystem): HttpDialog[Unit] = {
       implicit val timeout = new util.Timeout(Long.MaxValue)
-      val connection = (system.actorFor(clientActorName) ? Connect(host, port)).mapTo[HttpConnection]
+      val connection = (system.actorFor("/user/" + clientActorName) ? Connect(host, port)).mapTo[HttpConnection]
       new HttpDialog(connection, connection.map(_ => ())) // start out with result type Unit
     }
   }
