@@ -117,7 +117,7 @@ trait HttpDialogComponent {
           log.debug("Closing connection after HttpDialog completion")
           conn.close()
         case Left(e: Throwable) =>
-          log.error("Received connection error - {}", e.getMessage)
+          log.error("Received connection error - {} {}", e.toString, e.getStackTrace.foldLeft("\n")((b,a) => b + a + "\n"))
       }
     }
 
