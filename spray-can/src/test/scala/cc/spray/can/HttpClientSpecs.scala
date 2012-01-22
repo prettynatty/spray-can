@@ -28,7 +28,7 @@ import org.specs2.specification._
 
 trait HttpClientSpecs extends Specification {
   implicit val system = ActorSystem("specs")
-  private lazy val log = LoggerFactory.getLogger(getClass)
+  protected lazy val log = LoggerFactory.getLogger(getClass)
   def clientSpecs =
 
     "This spec exercises the HttpClient timeout logic" ^
