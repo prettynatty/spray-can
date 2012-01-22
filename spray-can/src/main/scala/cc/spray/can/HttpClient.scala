@@ -16,12 +16,12 @@
 
 package cc.spray.can
 import HttpProtocols._
-import akka.actor.{ Actor, ActorContext, ActorRef, Props }
+import akka.actor.{Actor, ActorContext, ActorRef, Props, Status}
 import akka.dispatch.Promise
 import java.lang.IllegalStateException
 import java.net.InetSocketAddress
 import java.nio.ByteBuffer
-import java.nio.channels.{ SelectionKey, SocketChannel }
+import java.nio.channels.{SelectionKey, SocketChannel}
 import scala.collection.mutable.Queue
 
 /**
@@ -122,12 +122,14 @@ class HttpClient(val config: ClientConfig = ClientConfig.fromAkkaConf) extends H
     } match {
       case Right(_: ClientConnection) => // nothing to do
       case Right(x: HttpConnection) => sender ! x
-      case Left(error) => sender ! new HttpClientException("Could not connect to " + address + ": " + error)
+      case Left(error) => sender ! Status.Failure(new HttpClientException("Could not connect to " + address + ": " + error))
       case _ => throw new IllegalStateException
     }
   }
 
   protected def handleConnectionEvent(key: SelectionKey) {
+    log.debug("HttpClient#handleConnectionEvent")
+    log.debug("key.isConnectable: " + key.isConnectable.toString)
     if (key.isConnectable) {
       val conn = key.attachment.asInstanceOf[ClientConnection]
       conn.connectionResponseActor.foreach { actor =>
@@ -143,6 +145,7 @@ class HttpClient(val config: ClientConfig = ClientConfig.fromAkkaConf) extends H
         }
       }
     } else throw new IllegalStateException
+    log.debug("HttpClient#handleConnectionEvent - exit")
   }
 
   private def prepareWriting(send: Send) {
