@@ -112,12 +112,10 @@ trait HttpDialogComponent {
      * of type `Future[Unit]` if the dialog does not contain any `send`.
      */
     def end: Future[A] = resultF.onComplete { _ =>
-      connectionF.onComplete {
-        case Right(conn: HttpConnection) =>
+      connectionF.onSuccess {
+        case conn: HttpConnection =>
           log.debug("Closing connection after HttpDialog completion")
           conn.close()
-        case Left(e: Throwable) =>
-          log.error("Received connection error - {} {}", e.toString, e.getStackTraceString)
       }
     }
 
