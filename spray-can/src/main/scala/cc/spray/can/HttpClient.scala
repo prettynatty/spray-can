@@ -270,7 +270,7 @@ class HttpClient(val config: ClientConfig = ClientConfig.fromAkkaConf) extends H
     def send(request: HttpRequest) = {
       // we "disable" the akka future timeout, since we rely on our own logic
       val future = Promise[HttpResponse]
-      val actor = context.actorOf(Props(new DefaultReceiverActor(future, config.parserConfig.maxContentLength)), name = "spray-can-default-receiver")
+      val actor = context.actorOf(Props(new DefaultReceiverActor(future, config.parserConfig.maxContentLength)))
       sendAndReceive(request, actor)
       future
     }
@@ -318,7 +318,7 @@ class HttpClient(val config: ClientConfig = ClientConfig.fromAkkaConf) extends H
       def close(extensions: List[ChunkExtension], trailer: List[HttpHeader]) = {
         // we "disable" the akka future timeout, since we rely on our own logic
         val future = Promise[HttpResponse]
-        val actor = context.actorOf(Props(new DefaultReceiverActor(future, config.parserConfig.maxContentLength)), name = "default-receiver-actor")
+        val actor = context.actorOf(Props(new DefaultReceiverActor(future, config.parserConfig.maxContentLength)))
         closeAndReceive(actor, None, extensions, trailer)
         future
       }

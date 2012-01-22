@@ -62,6 +62,7 @@ trait HttpClientSpecs extends Specification {
   }
 
   private def illegalConnect = {
+    throw new Exception("xaxa")
     log.debug("illegalConnect:start")
     val f = dialog(16243)
       .send(HttpRequest(GET, "/"))
