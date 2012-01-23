@@ -92,6 +92,7 @@ private[can] abstract class HttpPeer(threadName: String) extends Actor with Acto
     }
   }
 
+  // Temporary solution. Perhaps we need akka.actor.IO object for io management
   val selectorActor = context.actorOf(Props(new SelectorActor(selector)).withDispatcher("pinned-dispatcher"), name = "selector")
 
   override def preStart() {
