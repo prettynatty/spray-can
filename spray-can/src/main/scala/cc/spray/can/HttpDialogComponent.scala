@@ -15,11 +15,12 @@
  */
 
 package cc.spray.can
-import akka.actor.{ActorSystem, Scheduler}
-import akka.dispatch.{Promise, Future}
+import akka.actor.{ ActorSystem, Scheduler }
+import akka.dispatch.{ Promise, Future }
 import org.slf4j.LoggerFactory
 import akka.util
 import akka.util.Duration
+import akka.pattern.ask
 
 trait HttpDialogComponent {
   private lazy val log = LoggerFactory.getLogger(getClass)
@@ -140,7 +141,7 @@ trait HttpDialogComponent {
     def apply(host: String, port: Int = 80,
       clientActorName: String)(implicit system: ActorSystem): HttpDialog[Unit] = {
       implicit val timeout = new util.Timeout(Long.MaxValue)
-      val connection = (system.actorFor("/user/" + clientActorName) ? Connect(host, port)).mapTo[HttpConnection]
+      val connection = system.actorFor("/user/" + clientActorName) ask Connect(host, port) mapTo manifest[HttpConnection]
       new HttpDialog(connection, connection.map(_ => ())) // start out with result type Unit
     }
   }

@@ -9,7 +9,7 @@ object Dependencies {
   )
 
   object V {
-    val akka      = "2.0-SNAPSHOT"
+    val akka      = "2.0-M3"
     val logback   = "1.0.0"
   }
 
