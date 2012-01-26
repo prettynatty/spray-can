@@ -114,36 +114,29 @@ private[can] abstract class HttpPeer(threadName: String) extends Actor with Acto
   }
 
   protected def receive = {
-    case Select => {
-      log.debug("in receive:Select")
-      selectorActor ! Select
-      log.debug("did selectorActor ! Select")
-    }
-    case Selected => {
-      log.debug("In Selected")
-      processSelected()
-    }
+    case Select => select()
     case HandleTimedOutRequests => handleTimedOutRequests()
     case ReapIdleConnections => connections.forAllTimedOut(config.idleTimeout)(reapConnection)
     case RefreshConnection(conn) => connections.refresh(conn)
     case GetStats => sender ! stats
   }
 
-  private def processSelected() {
-    log.debug("In processSelected()")
+  private def select() {
+    // The following select() call only really blocks for a longer period of time if the actors mailbox is empty and no
+    // other tasks have been scheduled by the dispatcher. Otherwise the dispatcher will either already have called
+    // selector.wakeup() (which causes the following call to not block at all) or do so in a short while.
+    selector.selectNow
     val selectedKeys = selector.selectedKeys.iterator
-    log.debug("selectedKeys.hasNext: {}",selectedKeys.hasNext)
     while (selectedKeys.hasNext) {
       val key = selectedKeys.next
       selectedKeys.remove()
       if (key.isValid) {
-        if (key.isWritable) {log.debug("writeable"); write(key)} // favor writes if writeable as well as readable
-        else if (key.isReadable) {log.debug("readable"); read(key)}
-        else {log.debug("handleConnectionEvent"); handleConnectionEvent(key)}
+        if (key.isWritable) write(key) // favor writes if writeable as well as readable
+        else if (key.isReadable) read(key)
+        else handleConnectionEvent(key)
       } else log.warning("Invalid selection key: {}", key)
     }
     self ! Select // loop
-    log.debug("exiting processSelected()")
   }
 
   private def read(key: SelectionKey) {
