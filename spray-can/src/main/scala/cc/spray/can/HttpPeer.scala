@@ -92,9 +92,6 @@ private[can] abstract class HttpPeer(threadName: String) extends Actor with Acto
     }
   }
 
-  // Temporary solution. Perhaps we need akka.actor.IO object for io management
-  val selectorActor = context.actorOf(Props(new SelectorActor(selector)).withDispatcher("pinned-dispatcher"), name = "selector")
-
   override def preStart() {
     // CAUTION: as of Akka 2.0 this method will not be called during a restart
     log.debug("Calling preStart()")
@@ -122,9 +119,7 @@ private[can] abstract class HttpPeer(threadName: String) extends Actor with Acto
   }
 
   private def select() {
-    // The following select() call only really blocks for a longer period of time if the actors mailbox is empty and no
-    // other tasks have been scheduled by the dispatcher. Otherwise the dispatcher will either already have called
-    // selector.wakeup() (which causes the following call to not block at all) or do so in a short while.
+    // FIXME: probably using selectNow here is very expensive way
     selector.selectNow
     val selectedKeys = selector.selectedKeys.iterator
     while (selectedKeys.hasNext) {
