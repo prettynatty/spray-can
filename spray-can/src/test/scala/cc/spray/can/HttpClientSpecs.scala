@@ -17,14 +17,13 @@
 package cc.spray.can
 
 import HttpMethods._
-import akka.actor.{Actor, ActorSystem, Props, Scheduler}
+import akka.actor.{ Actor, ActorSystem, Props, Scheduler }
 import akka.dispatch.Await
 import akka.util
 import akka.util.Duration
 import org.slf4j.LoggerFactory
 import org.specs2.Specification
 import org.specs2.specification._
-
 
 trait HttpClientSpecs extends Specification {
   implicit val system = ActorSystem("specs")
@@ -53,7 +52,7 @@ trait HttpClientSpecs extends Specification {
   import HttpClient._
   import Await._
   implicit val timeout = system.settings.ActorTimeout
-  
+
   private def oneRequest = {
     result(dialog()
       .send(HttpRequest(GET, "/yeah"))
@@ -65,10 +64,9 @@ trait HttpClientSpecs extends Specification {
     log.debug("illegalConnect:start")
     val f = dialog(16243)
       .send(HttpRequest(GET, "/"))
-      .end
-    f recover {
-      case e => log.debug(e.toString)
-    }
+      .end recover {
+        case e => e.toString
+      }
     result(f, timeout.duration) mustEqual "cc.spray.can.HttpClientException: " +
       "Could not connect to localhost:16243 due to java.net.ConnectException: Connection refused"
   }
@@ -77,10 +75,9 @@ trait HttpClientSpecs extends Specification {
     log.debug("timeoutRequest:start")
     val f = dialog()
       .send(HttpRequest(GET, "/wait500"))
-      .end
-    f recover {
-      case e => log.debug(e.toString)
-    }
+      .end recover {
+        case e => e.toString
+      }
     result(f, timeout.duration) mustEqual "cc.spray.can.HttpClientException: Request timed out"
   }
 
@@ -89,10 +86,9 @@ trait HttpClientSpecs extends Specification {
     val f = dialog()
       .waitIdle(Duration("500 ms"))
       .send(HttpRequest(GET, "/"))
-      .end
-    f recover {
-      case e => log.debug(e.toString)
-    }
+      .end recover {
+        case e => e.toString
+      }
     result(f, timeout.duration) mustEqual "cc.spray.can.HttpClientException: " +
       "Cannot send request due to closed connection"
   }

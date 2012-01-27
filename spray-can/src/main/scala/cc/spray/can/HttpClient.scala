@@ -25,6 +25,11 @@ import java.nio.channels.{SelectionKey, SocketChannel}
 import scala.collection.mutable.Queue
 
 /**
+ * Special exception used for transporting error occuring during [[cc.spray.can.HttpClient]] operations.
+ */
+class HttpClientException(message: String) extends RuntimeException(message)
+  
+/**
  * Message to be send to an [[cc.spray.can.HttpClient]] actor to initiate a new connection to the given host and port.
  * Upon successful establishment of the HTTP connection the [[cc.spray.can.HttpClient]] responds with an
  * [[cc.spray.can.HttpConnection]] instance.
@@ -141,7 +146,7 @@ class HttpClient(val config: ClientConfig = ClientConfig.fromAkkaConf) extends H
           new DefaultHttpConnection(conn)
         } match {
           case Right(x) => actor ! x
-          case Left(error) => actor ! new HttpClientException("Could not connect to " + conn.host + ':' + conn.port + " due to " + error)
+          case Left(error) => actor ! Status.Failure(new HttpClientException("Could not connect to " + conn.host + ':' + conn.port + " due to " + error))
         }
       }
     } else throw new IllegalStateException
@@ -341,8 +346,3 @@ class HttpClient(val config: ClientConfig = ClientConfig.fromAkkaConf) extends H
     }
   }
 }
-
-/**
- * Special exception used for transporting error occuring during [[cc.spray.can.HttpClient]] operations.
- */
-class HttpClientException(message: String) extends RuntimeException(message)
